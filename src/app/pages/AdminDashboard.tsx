@@ -1,0 +1,295 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import * as api from '../lib/api';
+import { Appointment, DentalVehicle, User as UserType } from '../types';
+import { Link, Navigate } from 'react-router';
+import { Button } from '../components/ui/Button';
+import { Calendar, Clock, MapPin, User, Settings, CheckCircle, XCircle, AlertCircle, Activity } from 'lucide-react';
+import { toast } from 'sonner';
+
+export default function AdminDashboard() {
+  const { user, isAdmin, accessToken } = useAuth();
+  const [activeTab, setActiveTab] = useState<'appointments' | 'vehicles' | 'users'>('appointments');
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
+  const [users, setUsers] = useState<UserType[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user || !isAdmin || !accessToken) return;
+
+    const loadData = async () => {
+      try {
+        const [appointmentsData, vehiclesData, usersData] = await Promise.all([
+          api.getAppointments(accessToken),
+          api.getVehicles(),
+          api.getAllUsers(accessToken),
+        ]);
+
+        setAppointments(appointmentsData);
+        setVehicles(vehiclesData);
+        setUsers(usersData);
+      } catch (error) {
+        console.error('Failed to load admin data:', error);
+        toast.error('Failed to load dashboard data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [user, isAdmin, accessToken]);
+
+  if (!user || !isAdmin) {
+    return <Navigate to="/" />;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh]">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <p className="text-gray-500 mt-4">Loading dashboard...</p>
+      </div>
+    );
+  }
+
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    if (!accessToken) return;
+
+    try {
+      await api.updateAppointment(id, newStatus as any, accessToken);
+      
+      setAppointments(prev => 
+        prev.map(a => a.id === id ? { ...a, status: newStatus as any } : a)
+      );
+      
+      toast.success(`Appointment marked as ${newStatus}`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update appointment');
+    }
+  };
+
+  const toggleUserStatus = async (id: string) => {
+    if (!accessToken) return;
+
+    try {
+      const targetUser = users.find(u => u.id === id);
+      if (!targetUser) return;
+
+      await api.updateUser(id, { is_active: !targetUser.is_active }, accessToken);
+      
+      setUsers(prev => 
+        prev.map(u => u.id === id ? { ...u, is_active: !u.is_active } : u)
+      );
+      
+      toast.success('User status updated');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update user');
+    }
+  };
+
+  // Stats Calculation
+  const totalAppointments = appointments.length;
+  const pendingAppointments = appointments.filter(a => a.status === 'Pending').length;
+  const activeVehicles = vehicles.filter(v => v.is_available).length;
+  const totalUsers = users.length;
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b pb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+          <p className="text-gray-500">Manage your dental fleet and appointments.</p>
+        </div>
+        <div className="flex bg-gray-100 p-1 rounded-lg">
+          {(['appointments', 'vehicles', 'users'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all capitalize ${
+                activeTab === tab 
+                  ? 'bg-white text-blue-600 shadow-sm' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="bg-blue-100 p-3 rounded-full text-blue-600">
+            <Calendar size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Total Bookings</p>
+            <p className="text-2xl font-bold text-gray-900">{totalAppointments}</p>
+          </div>
+        </div>
+        
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="bg-yellow-100 p-3 rounded-full text-yellow-600">
+            <AlertCircle size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Pending Actions</p>
+            <p className="text-2xl font-bold text-gray-900">{pendingAppointments}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="bg-green-100 p-3 rounded-full text-green-600">
+            <Activity size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Active Vehicles</p>
+            <p className="text-2xl font-bold text-gray-900">{activeVehicles} / {vehicles.length}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="bg-purple-100 p-3 rounded-full text-purple-600">
+            <User size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Total Users</p>
+            <p className="text-2xl font-bold text-gray-900">{totalUsers}</p>
+          </div>
+        </div>
+      </div>
+
+      {activeTab === 'appointments' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h3 className="font-bold text-gray-900">Recent Appointments</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {appointments.map((appt) => (
+                  <tr key={appt.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{appt.user_name || 'Unknown'}</div>
+                      <div className="text-sm text-gray-500">{appt.user_id}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{appt.service_name}</div>
+                      <div className="text-sm text-gray-500">{appt.vehicle_name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{appt.date}</div>
+                      <div className="text-sm text-gray-500">{appt.time}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+                        ${appt.status === 'Approved' ? 'bg-green-100 text-green-800' : 
+                          appt.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 
+                          appt.status === 'Cancelled' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'}`}>
+                        {appt.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                      {appt.status === 'Pending' && (
+                        <Button size="sm" onClick={() => handleStatusChange(appt.id, 'Approved')} className="bg-green-600 hover:bg-green-700 text-white">
+                          Approve
+                        </Button>
+                      )}
+                      {appt.status !== 'Cancelled' && (
+                        <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleStatusChange(appt.id, 'Cancelled')}>
+                          Cancel
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'vehicles' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {vehicles.map((vehicle) => (
+            <div key={vehicle.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-bold text-gray-900">{vehicle.name}</h3>
+                <span className={`px-2 py-1 text-xs rounded font-bold ${vehicle.is_available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  {vehicle.is_available ? 'Active' : 'Maintenance'}
+                </span>
+              </div>
+              <div className="space-y-2 text-gray-600 mb-6">
+                <p className="flex items-center gap-2 text-sm"><MapPin size={16} /> {vehicle.location}</p>
+                <p className="flex items-center gap-2 text-sm"><Clock size={16} /> 9AM - 5PM</p>
+              </div>
+              <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                <Button variant="outline" size="sm">Edit Details</Button>
+                <button className="text-blue-600 text-sm font-medium hover:underline">View Schedule</button>
+              </div>
+            </div>
+          ))}
+          <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all min-h-[200px]">
+            <div className="bg-gray-100 p-4 rounded-full mb-3 group-hover:bg-blue-100">
+              <Settings className="w-6 h-6" />
+            </div>
+            <span className="font-medium">+ Add New Vehicle</span>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'users' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {users.map((u) => (
+                <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{u.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.email}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{u.role.replace('_', ' ')}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                      ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {u.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => toggleUserStatus(u.id)}
+                      className={u.is_active ? 'text-red-600 border-red-200 hover:bg-red-50' : 'text-green-600 border-green-200 hover:bg-green-50'}
+                    >
+                      {u.is_active ? 'Deactivate' : 'Activate'}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
