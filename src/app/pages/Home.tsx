@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import * as api from '../lib/api';
-import { DentalVehicle } from '../types';
+import type { DentalVehicle } from '../types';
 import { Button } from '../components/ui/Button';
 import { MapPin, Clock, Calendar, CheckCircle2, ArrowRight, Info } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { usePolling } from '../hooks/usePolling';
 
 export default function Home() {
   const { user } = useAuth();
@@ -14,20 +15,23 @@ export default function Home() {
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const loadVehicles = async () => {
-      try {
-        const data = await api.getVehicles();
-        setVehicles(data);
-      } catch (error) {
-        console.error('Failed to load vehicles:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadVehicles();
+  const loadVehicles = useCallback(async () => {
+    try {
+      const data = await api.getVehicles();
+      setVehicles(data);
+    } catch (error) {
+      console.error('Failed to load vehicles:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadVehicles();
+  }, [loadVehicles]);
+
+  // Keep the fleet list fresh (availability changes) without a Realtime channel.
+  usePolling(loadVehicles, { intervalMs: 45_000 });
 
   const filteredVehicles = vehicles.filter(v => 
     filter === 'all' ? true : v.is_available
@@ -163,6 +167,14 @@ export default function Home() {
           </div>
         </div>
 
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+            <p className="text-gray-500 mt-4">Loading our fleet...</p>
+          </div>
+        ) : filteredVehicles.length === 0 ? (
+          <p className="text-center text-gray-500 py-12">No vehicles to show right now.</p>
+        ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredVehicles.map((vehicle) => (
             <motion.div 
@@ -210,6 +222,7 @@ export default function Home() {
             </motion.div>
           ))}
         </div>
+        )}
       </section>
     </div>
   );

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, Role } from '../types';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import type { User } from '../types';
 import * as api from '../lib/api';
 
 interface AuthContextType {
@@ -19,17 +19,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Check for existing session on mount
+  // Check for existing session on mount and validate it against the server.
+  // If the server rejects the stored token (e.g. after a DB migration or sign-out
+  // from another device), the stale token is cleared so the user can log in again.
   useEffect(() => {
     const storedToken = localStorage.getItem('access_token');
     const storedUser = localStorage.getItem('user');
 
     if (storedToken && storedUser) {
+      // Optimistically populate state, then verify with the server.
       setAccessToken(storedToken);
       setUser(JSON.parse(storedUser));
+
+      api.getCurrentUser(storedToken)
+        .then((freshUser) => {
+          // Update user data in case it changed server-side.
+          setUser(freshUser);
+          localStorage.setItem('user', JSON.stringify(freshUser));
+        })
+        .catch(() => {
+          // Server rejected the token — clear stale session silently.
+          console.warn('Stored session is invalid or expired. Clearing local session.');
+          setUser(null);
+          setAccessToken(null);
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('user');
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
     }
-    
-    setLoading(false);
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -52,8 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (name: string, email: string, password: string, phone: string) => {
     try {
-      const data = await api.signUp(email, password, name, phone);
-      
+      await api.signUp(email, password, name, phone);
+
       // After registration, automatically log in
       await login(email, password);
     } catch (error) {
@@ -87,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {

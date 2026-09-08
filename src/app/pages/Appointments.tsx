@@ -1,38 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
-import { Appointment } from '../types';
+import type { Appointment } from '../types';
 import { Link } from 'react-router';
 import { Button } from '../components/ui/Button';
 import { Calendar, Clock, MapPin, Activity, XCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRealtimeRefetch } from '../hooks/useRealtime';
 
 export default function Appointments() {
   const { user, accessToken } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
-  useEffect(() => {
-    const loadAppointments = async () => {
-      if (!user || !accessToken) {
-        setIsLoading(false);
-        return;
-      }
 
-      try {
-        const data = await api.getAppointments(accessToken);
-        setAppointments(data);
-      } catch (error) {
-        console.error('Failed to load appointments:', error);
-        toast.error('Failed to load appointments');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const loadAppointments = useCallback(async () => {
+    if (!user || !accessToken) {
+      setIsLoading(false);
+      return;
+    }
 
-    loadAppointments();
+    try {
+      const data = await api.getAppointments(accessToken);
+      setAppointments(data);
+    } catch (error) {
+      console.error('Failed to load appointments:', error);
+      toast.error('Failed to load appointments');
+    } finally {
+      setIsLoading(false);
+    }
   }, [user, accessToken]);
-  
+
+  useEffect(() => {
+    loadAppointments();
+  }, [loadAppointments]);
+
+  // Live-update the list when an appointment is created / approved / cancelled.
+  useRealtimeRefetch('appointments', loadAppointments, { enabled: !!user && !!accessToken });
+
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
@@ -71,8 +75,8 @@ export default function Appointments() {
         );
         
         toast.success('Appointment cancelled successfully');
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to cancel appointment');
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to cancel appointment');
       }
     }
   };

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { DentalVehicle } from '../../types';
+import type { DentalVehicle } from '../../types';
 import * as api from '../../lib/api';
 import { MapPin, Clock } from 'lucide-react';
 

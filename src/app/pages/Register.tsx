@@ -1,24 +1,31 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, Link } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
 
+type RegisterFormValues = {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+};
+
 export default function Register() {
   const { register: registerUser } = useAuth(); // rename to avoid conflict with RHF
   const navigate = useNavigate();
-  const { register, handleSubmit, formState: { errors } } = useForm();
+  const { register, handleSubmit, formState: { errors } } = useForm<RegisterFormValues>();
   const [isLoading, setIsLoading] = useState(false);
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true);
     try {
       await registerUser(data.name, data.email, data.password, data.phone);
       toast.success('Registration successful! You are now logged in.');
       navigate('/');
-    } catch (error: any) {
-      toast.error(error.message || 'Registration failed. Please try again.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
     }

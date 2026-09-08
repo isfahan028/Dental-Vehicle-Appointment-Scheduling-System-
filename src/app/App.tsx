@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { RouterProvider } from 'react-router-dom';
+import { RouterProvider } from 'react-router';
 import { router } from './routes';
 import * as api from './lib/api';
 

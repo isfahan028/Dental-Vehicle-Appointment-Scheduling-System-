@@ -1,5 +1,5 @@
 import { projectId, publicAnonKey } from "../utils/supabase/info";
-import { User, DentalVehicle, Service, Appointment, AppointmentStatus } from '../types';
+import type { User, DentalVehicle, Service, Appointment, AppointmentStatus } from '../types';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-e95806c6`;
 
@@ -213,8 +213,6 @@ export async function createAppointment(
   },
   accessToken: string
 ) {
-  console.log('📅 Creating appointment...', appointmentData);
-  
   const response = await fetch(`${API_BASE_URL}/appointments`, {
     method: 'POST',
     headers: getAuthHeaders(accessToken),
@@ -224,11 +222,9 @@ export async function createAppointment(
   const data = await response.json();
 
   if (!response.ok) {
-    console.error('❌ Failed to create appointment:', data);
     throw new Error(data.error || 'Failed to create appointment');
   }
 
-  console.log('✅ Appointment created successfully!', data.appointment);
   return data;
 }
 

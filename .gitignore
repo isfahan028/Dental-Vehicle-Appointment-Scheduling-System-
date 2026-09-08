@@ -11,6 +11,14 @@ node_modules
 dist
 dist-ssr
 *.local
+*.tsbuildinfo
+
+# Vercel
+.vercel
+
+# Supabase CLI
+supabase/.temp
+supabase/.branches
 
 # Editor directories and files
 .vscode/*

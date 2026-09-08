@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
-import { Appointment, DentalVehicle, User as UserType } from '../types';
-import { Link, Navigate } from 'react-router';
+import type { Appointment, AppointmentStatus, DentalVehicle, User as UserType } from '../types';
+import { Navigate } from 'react-router';
 import { Button } from '../components/ui/Button';
-import { Calendar, Clock, MapPin, User, Settings, CheckCircle, XCircle, AlertCircle, Activity } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRealtimeRefetch } from '../hooks/useRealtime';
+import { usePolling } from '../hooks/usePolling';
 
 export default function AdminDashboard() {
   const { user, isAdmin, accessToken } = useAuth();
@@ -15,30 +17,44 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const canLoad = !!user && isAdmin && !!accessToken;
+
+  const loadAll = useCallback(async () => {
+    if (!accessToken) return;
+    try {
+      const [appointmentsData, vehiclesData, usersData] = await Promise.all([
+        api.getAppointments(accessToken),
+        api.getVehicles(),
+        api.getAllUsers(accessToken),
+      ]);
+      setAppointments(appointmentsData);
+      setVehicles(vehiclesData);
+      setUsers(usersData);
+    } catch (error) {
+      console.error('Failed to load admin data:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [accessToken]);
+
+  const refetchAppointments = useCallback(async () => {
+    if (!accessToken) return;
+    try {
+      setAppointments(await api.getAppointments(accessToken));
+    } catch (error) {
+      console.error('Failed to refresh appointments:', error);
+    }
+  }, [accessToken]);
+
   useEffect(() => {
-    if (!user || !isAdmin || !accessToken) return;
+    if (canLoad) loadAll();
+  }, [canLoad, loadAll]);
 
-    const loadData = async () => {
-      try {
-        const [appointmentsData, vehiclesData, usersData] = await Promise.all([
-          api.getAppointments(accessToken),
-          api.getVehicles(),
-          api.getAllUsers(accessToken),
-        ]);
-
-        setAppointments(appointmentsData);
-        setVehicles(vehiclesData);
-        setUsers(usersData);
-      } catch (error) {
-        console.error('Failed to load admin data:', error);
-        toast.error('Failed to load dashboard data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, [user, isAdmin, accessToken]);
+  // Appointments change often while an admin is working — push updates instantly.
+  useRealtimeRefetch('appointments', refetchAppointments, { enabled: canLoad });
+  // Vehicles / users change rarely — a periodic refresh is enough.
+  usePolling(loadAll, { intervalMs: 30_000, enabled: canLoad });
 
   if (!user || !isAdmin) {
     return <Navigate to="/" />;
@@ -53,19 +69,19 @@ export default function AdminDashboard() {
     );
   }
 
-  const handleStatusChange = async (id: string, newStatus: string) => {
+  const handleStatusChange = async (id: string, newStatus: AppointmentStatus) => {
     if (!accessToken) return;
 
     try {
-      await api.updateAppointment(id, newStatus as any, accessToken);
+      await api.updateAppointment(id, newStatus, accessToken);
       
       setAppointments(prev => 
-        prev.map(a => a.id === id ? { ...a, status: newStatus as any } : a)
+        prev.map(a => a.id === id ? { ...a, status: newStatus } : a)
       );
       
       toast.success(`Appointment marked as ${newStatus}`);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update appointment');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update appointment');
     }
   };
 
@@ -83,8 +99,8 @@ export default function AdminDashboard() {
       );
       
       toast.success('User status updated');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update user');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update user');
     }
   };
 

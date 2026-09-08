@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import * as api from '../../lib/api';
@@ -10,7 +10,7 @@ import { StepDateTime } from './StepDateTime';
 import { StepReview } from './StepReview';
 
 export const BookingWizard: React.FC = () => {
-  const { user, accessToken } = useAuth();
+  const { user, accessToken, logout } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preSelectedVehicleId = searchParams.get('vehicleId');
@@ -78,9 +78,24 @@ export const BookingWizard: React.FC = () => {
       console.log('Appointment created successfully:', response);
       toast.success('Appointment booked successfully!');
       navigate('/appointments');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to create appointment:', error);
-      toast.error(error.message || 'Failed to book appointment. Please try again.');
+
+      // If the session has expired or is invalid, log the user out
+      // and redirect to login so they can get a fresh session token.
+      const msg = error instanceof Error ? error.message : '';
+      if (
+        msg.includes('Invalid or expired session') ||
+        msg.includes('No session token') ||
+        msg.includes('Unauthorized')
+      ) {
+        toast.error('Your session has expired. Please log in again.');
+        await logout();
+        navigate('/login');
+        return;
+      }
+
+      toast.error(msg || 'Failed to book appointment. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

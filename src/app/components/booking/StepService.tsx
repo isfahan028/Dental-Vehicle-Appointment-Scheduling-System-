@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Service } from '../../types';
+import type { Service } from '../../types';
 import * as api from '../../lib/api';
 import { Check, Clock, DollarSign } from 'lucide-react';
 

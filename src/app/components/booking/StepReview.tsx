@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as api from '../../lib/api';
-import { Service, DentalVehicle } from '../../types';
+import type { Service, DentalVehicle } from '../../types';
 import { Button } from '../ui/Button';
 import { CheckCircle2, MapPin, Clock, Calendar, Check } from 'lucide-react';
 
