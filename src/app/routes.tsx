@@ -6,6 +6,7 @@ import Register from "./pages/Register";
 import Booking from "./pages/Booking";
 import Appointments from "./pages/Appointments";
 import AdminDashboard from "./pages/AdminDashboard";
+import AvailabilityCalendar from "./pages/AvailabilityCalendar";
 
 export const router = createBrowserRouter([
   {
@@ -13,6 +14,7 @@ export const router = createBrowserRouter([
     Component: Layout,
     children: [
       { index: true, Component: Home },
+      { path: "calendar", Component: AvailabilityCalendar },
       { path: "login", Component: Login },
       { path: "register", Component: Register },
       { path: "book", Component: Booking },

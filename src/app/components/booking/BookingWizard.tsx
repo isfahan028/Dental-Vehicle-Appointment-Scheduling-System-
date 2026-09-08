@@ -14,13 +14,15 @@ export const BookingWizard: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preSelectedVehicleId = searchParams.get('vehicleId');
+  const preSelectedDate = searchParams.get('date');
+  const preSelectedTime = searchParams.get('time');
 
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({
     serviceId: '',
     vehicleId: preSelectedVehicleId || '',
-    date: '',
-    time: ''
+    date: preSelectedDate || '',
+    time: preSelectedTime || ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -162,6 +164,7 @@ export const BookingWizard: React.FC = () => {
             )}
             {currentStep === 2 && (
               <StepDateTime
+                vehicleId={formData.vehicleId}
                 date={formData.date}
                 time={formData.time}
                 onDateChange={(d) => updateFormData('date', d)}

@@ -21,6 +21,14 @@ function Navbar() {
           >
             Home
           </NavLink>
+          <NavLink
+            to="/calendar"
+            className={({ isActive }) =>
+              isActive ? "font-bold underline" : "hover:text-blue-100"
+            }
+          >
+            Availability
+          </NavLink>
           {user && (
             <>
               <NavLink
