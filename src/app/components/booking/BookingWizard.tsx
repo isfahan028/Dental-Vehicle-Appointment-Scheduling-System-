@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
+import { useAvailability } from '../../hooks/useAvailability';
+import { slotKey } from '../../lib/slots';
 import * as api from '../../lib/api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,8 +11,18 @@ import { StepVehicle } from './StepVehicle';
 import { StepDateTime } from './StepDateTime';
 import { StepReview } from './StepReview';
 
+const DATETIME_STEP = 2;
+const SLOT_TAKEN_MESSAGE =
+  'This slot is already booked. Please select another time slot.';
+
+// Does a server / network error mean "someone else took this slot"?
+function isSlotConflict(message: string): boolean {
+  return /already booked|slot.*(taken|unavailable|conflict)|\b409\b/i.test(message);
+}
+
 export const BookingWizard: React.FC = () => {
   const { user, accessToken, logout } = useAuth();
+  const { reload: reloadAvailability } = useAvailability();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preSelectedVehicleId = searchParams.get('vehicleId');
@@ -25,6 +37,10 @@ export const BookingWizard: React.FC = () => {
     time: preSelectedTime || ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [conflictNotice, setConflictNotice] = useState<string | null>(null);
+  // Hard guard against a double-click firing two bookings before the button
+  // disables on re-render.
+  const submitLock = useRef(false);
 
   // If vehicle is pre-selected, we might want to skip to step 1 (Service)? 
   // Or just have it selected in step 2 (Location).
@@ -51,41 +67,68 @@ export const BookingWizard: React.FC = () => {
 
   const updateFormData = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    // Picking a fresh time clears any stale "slot taken" warning.
+    if (field === 'time' && value) setConflictNotice(null);
+  };
+
+  // Slot is gone: don't book, don't celebrate — send the user back to the
+  // time picker with a clear, persistent explanation and fresh availability.
+  const handleSlotTaken = () => {
+    setConflictNotice(SLOT_TAKEN_MESSAGE);
+    toast.error(SLOT_TAKEN_MESSAGE, { duration: 6000 });
+    setFormData(prev => ({ ...prev, time: '' }));
+    setCurrentStep(DATETIME_STEP);
+    void reloadAvailability();
   };
 
   const handleConfirm = async () => {
+    if (submitLock.current || isSubmitting) return;
+
     if (!user || !accessToken) {
       toast.error('Please log in to complete your booking');
       navigate('/login');
       return;
     }
 
+    const { vehicleId, serviceId, date, time } = formData;
+    if (!vehicleId || !serviceId || !date || !time) {
+      toast.error('Please complete every step before confirming.');
+      return;
+    }
+
+    submitLock.current = true;
     setIsSubmitting(true);
-    
+
     try {
-      console.log('Creating appointment with data:', {
-        vehicle_id: formData.vehicleId,
-        service_id: formData.serviceId,
-        date: formData.date,
-        time: formData.time,
-      });
+      // Pre-flight check: confirm the slot is STILL free right now, before we
+      // create anything. This is what stops the "Appointment booked!" /
+      // "slot already taken" whiplash — a taken slot never reaches the API.
+      const takenSlots = await reloadAvailability();
+      if (takenSlots?.has(slotKey(vehicleId, date, time))) {
+        handleSlotTaken();
+        return;
+      }
 
-      const response = await api.createAppointment({
-        vehicle_id: formData.vehicleId,
-        service_id: formData.serviceId,
-        date: formData.date,
-        time: formData.time,
-      }, accessToken);
+      await api.createAppointment(
+        { vehicle_id: vehicleId, service_id: serviceId, date, time },
+        accessToken,
+      );
 
-      console.log('Appointment created successfully:', response);
       toast.success('Appointment booked successfully!');
       navigate('/appointments');
     } catch (error) {
       console.error('Failed to create appointment:', error);
-
-      // If the session has expired or is invalid, log the user out
-      // and redirect to login so they can get a fresh session token.
       const msg = error instanceof Error ? error.message : '';
+
+      // The server rejected it because the slot was claimed in the moment
+      // between our pre-flight check and the insert (or the DB unique index
+      // fired). Same clean handling — no success message.
+      if (isSlotConflict(msg)) {
+        handleSlotTaken();
+        return;
+      }
+
+      // Expired / invalid session: log out and send to login for a fresh token.
       if (
         msg.includes('Invalid or expired session') ||
         msg.includes('No session token') ||
@@ -99,6 +142,7 @@ export const BookingWizard: React.FC = () => {
 
       toast.error(msg || 'Failed to book appointment. Please try again.');
     } finally {
+      submitLock.current = false;
       setIsSubmitting(false);
     }
   };
@@ -167,6 +211,7 @@ export const BookingWizard: React.FC = () => {
                 vehicleId={formData.vehicleId}
                 date={formData.date}
                 time={formData.time}
+                notice={conflictNotice}
                 onDateChange={(d) => updateFormData('date', d)}
                 onTimeChange={(t) => updateFormData('time', t)}
                 onNext={handleNext}

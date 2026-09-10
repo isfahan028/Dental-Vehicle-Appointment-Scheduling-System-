@@ -229,6 +229,15 @@ export async function getAppointment(id: string) {
   return data ? mapAppointment(data) : null;
 }
 
+// Thrown when the DB unique index rejects a second booking for the same
+// vehicle + date + time. The route turns this into a 409.
+export class SlotConflictError extends Error {
+  constructor() {
+    super('Time slot already booked');
+    this.name = 'SlotConflictError';
+  }
+}
+
 export async function createAppointment(appt: any) {
   const supabase = client();
   const { data, error } = await supabase.from('appointments').insert({
@@ -244,7 +253,12 @@ export async function createAppointment(appt: any) {
     services(service_name),
     users(name)
   `).maybeSingle();
-  if (error) throw new Error(`createAppointment failed: ${error.message}`);
+  if (error) {
+    // 23505 = unique_violation — the partial unique index on
+    // (vehicle_id, appointment_date, appointment_time) WHERE status <> 'Cancelled'.
+    if (error.code === '23505') throw new SlotConflictError();
+    throw new Error(`createAppointment failed: ${error.message}`);
+  }
   if (!data) throw new Error('createAppointment: insert succeeded but no data returned (check RLS policies on appointments)');
   return mapAppointment(data);
 }

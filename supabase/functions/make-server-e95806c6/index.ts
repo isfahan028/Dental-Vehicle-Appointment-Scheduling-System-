@@ -365,7 +365,7 @@ app.post('/make-server-e95806c6/appointments', async (c) => {
       return c.json({ error: 'Service not found' }, 404);
     }
 
-    // Check for conflicts
+    // Check for conflicts BEFORE creating anything.
     const hasConflict = await db.hasAppointmentConflict(vehicle_id, date, time);
 
     if (hasConflict) {
@@ -373,20 +373,31 @@ app.post('/make-server-e95806c6/appointments', async (c) => {
       return c.json({ error: 'Time slot already booked' }, 409);
     }
 
-    const appointment = await db.createAppointment({
-      user_id: userId,
-      vehicle_id,
-      service_id,
-      date,
-      time,
-      status: 'Pending',
-    });
+    let appointment;
+    try {
+      appointment = await db.createAppointment({
+        user_id: userId,
+        vehicle_id,
+        service_id,
+        date,
+        time,
+        status: 'Pending',
+      });
+    } catch (err) {
+      // Lost the race: another request claimed the slot between the check
+      // above and this insert, and the DB unique index rejected it.
+      if (err instanceof db.SlotConflictError) {
+        console.log(`Time slot race lost for vehicle ${vehicle_id} on ${date} at ${time}`);
+        return c.json({ error: 'Time slot already booked' }, 409);
+      }
+      throw err;
+    }
 
     console.log(`Appointment ${appointment.id} created successfully`);
 
-    return c.json({ 
-      appointment, 
-      message: 'Appointment created successfully' 
+    return c.json({
+      appointment,
+      message: 'Appointment created successfully'
     });
   } catch (error) {
     console.error(`Error creating appointment: ${error}`);

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { Link } from 'react-router';
-import { Calendar, Clock, ChevronRight, ChevronLeft, CalendarDays } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, ChevronLeft, CalendarDays, AlertTriangle } from 'lucide-react';
 import { useAvailability } from '../../hooks/useAvailability';
 import { TIME_SLOTS, slotKey } from '../../lib/slots';
 
@@ -8,6 +8,8 @@ interface StepDateTimeProps {
   vehicleId: string;
   date: string;
   time: string;
+  /** Shown as a prominent alert, e.g. after a slot was taken at confirm time. */
+  notice?: string | null;
   onDateChange: (date: string) => void;
   onTimeChange: (time: string) => void;
   onNext: () => void;
@@ -18,6 +20,7 @@ export const StepDateTime: React.FC<StepDateTimeProps> = ({
   vehicleId,
   date,
   time,
+  notice,
   onDateChange,
   onTimeChange,
   onNext,
@@ -46,6 +49,16 @@ export const StepDateTime: React.FC<StepDateTimeProps> = ({
         <h2 className="text-2xl font-bold text-gray-800">Select Date & Time</h2>
         <p className="text-gray-500">Pick a convenient slot for your appointment</p>
       </div>
+
+      {notice && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+        >
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
+          <p className="font-medium">{notice}</p>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-8">
         <div className="space-y-4">

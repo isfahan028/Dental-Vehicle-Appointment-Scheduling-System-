@@ -45,7 +45,10 @@ export function useAvailability() {
     error: null,
   });
 
-  const reload = useCallback(async () => {
+  // Returns the freshly-fetched set of taken slot keys (or null on failure) so
+  // callers can do a just-in-time conflict check right before booking, without
+  // waiting for React state / polling to catch up.
+  const reload = useCallback(async (): Promise<Set<string> | null> => {
     try {
       const [vehiclesRes, apptRes] = await Promise.all([
         supabase
@@ -77,12 +80,17 @@ export function useAvailability() {
         }));
 
       setState({ vehicles, bookings, loading: false, error: null });
+
+      const freshSet = new Set<string>();
+      for (const b of bookings) freshSet.add(slotKey(b.vehicleId, b.date, b.time));
+      return freshSet;
     } catch (err) {
       setState((s) => ({
         ...s,
         loading: false,
         error: err instanceof Error ? err.message : 'Failed to load availability',
       }));
+      return null;
     }
   }, []);
 
