@@ -1,9 +1,12 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
 import type { Appointment, AppointmentStatus, DentalVehicle, User as UserType } from '../types';
 import { Button } from '../components/ui/Button';
-import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search } from 'lucide-react';
+
+const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
+type AppointmentFilter = (typeof APPOINTMENT_FILTERS)[number];
 import { toast } from 'sonner';
 import { useRealtimeRefetch } from '../hooks/useRealtime';
 import { usePolling } from '../hooks/usePolling';
@@ -11,6 +14,8 @@ import { usePolling } from '../hooks/usePolling';
 export default function AdminDashboard() {
   const { user, isAdmin, accessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<'appointments' | 'vehicles' | 'users'>('appointments');
+  const [apptFilter, setApptFilter] = useState<AppointmentFilter>('All');
+  const [apptSearch, setApptSearch] = useState('');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
@@ -54,6 +59,22 @@ export default function AdminDashboard() {
   useRealtimeRefetch('appointments', refetchAppointments, { enabled: canLoad });
   // Vehicles / users change rarely — a periodic refresh is enough.
   usePolling(loadAll, { intervalMs: 30_000, enabled: canLoad });
+
+  // Client-side filter + search + newest-first sort for the appointments table.
+  const visibleAppointments = useMemo(() => {
+    const q = apptSearch.trim().toLowerCase();
+    return appointments
+      .filter(a => apptFilter === 'All' || a.status === apptFilter)
+      .filter(a => {
+        if (!q) return true;
+        return (
+          (a.user_name ?? '').toLowerCase().includes(q) ||
+          (a.service_name ?? '').toLowerCase().includes(q) ||
+          (a.vehicle_name ?? '').toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`));
+  }, [appointments, apptFilter, apptSearch]);
 
   if (isLoading) {
     return (
@@ -174,8 +195,40 @@ export default function AdminDashboard() {
 
       {activeTab === 'appointments' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h3 className="font-bold text-gray-900">Recent Appointments</h3>
+          <div className="px-6 py-4 border-b border-gray-100 space-y-4">
+            <h3 className="font-bold text-gray-900">
+              Appointments
+              <span className="ml-2 text-sm font-normal text-gray-400">
+                Showing {visibleAppointments.length} of {appointments.length}
+              </span>
+            </h3>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={apptSearch}
+                  onChange={(e) => setApptSearch(e.target.value)}
+                  placeholder="Search patient, service or vehicle…"
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto">
+                {APPOINTMENT_FILTERS.map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setApptFilter(f)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all ${
+                      apptFilter === f
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -189,7 +242,16 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {appointments.map((appt) => (
+                {visibleAppointments.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-400">
+                      {appointments.length === 0
+                        ? 'No appointments yet.'
+                        : 'No appointments match your filters.'}
+                    </td>
+                  </tr>
+                )}
+                {visibleAppointments.map((appt) => (
                   <tr key={appt.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{appt.user_name || 'Unknown'}</div>
