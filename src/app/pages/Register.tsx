@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, Link } from 'react-router';
+import { useNavigate, useLocation, Link } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
@@ -12,18 +12,27 @@ type RegisterFormValues = {
   password: string;
 };
 
+type RegisterLocationState = {
+  from?: string;
+};
+
 export default function Register() {
   const { register: registerUser } = useAuth(); // rename to avoid conflict with RHF
   const navigate = useNavigate();
+  const location = useLocation();
   const { register, handleSubmit, formState: { errors } } = useForm<RegisterFormValues>();
   const [isLoading, setIsLoading] = useState(false);
+
+  // If the user was redirected here from a protected page (e.g. booking),
+  // send them back there once their account is created and logged in.
+  const redirectTo = (location.state as RegisterLocationState | null)?.from ?? '/';
 
   const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true);
     try {
       await registerUser(data.name, data.email, data.password, data.phone);
       toast.success('Registration successful! You are now logged in.');
-      navigate('/');
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Registration failed. Please try again.');
     } finally {
@@ -93,7 +102,7 @@ export default function Register() {
       </form>
       
       <p className="mt-4 text-center text-sm text-gray-600">
-        Already have an account? <Link to="/login" className="text-blue-600 hover:underline">Login here</Link>
+        Already have an account? <Link to="/login" state={location.state} className="text-blue-600 hover:underline">Login here</Link>
       </p>
     </div>
   );

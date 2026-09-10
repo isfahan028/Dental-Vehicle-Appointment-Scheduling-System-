@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, Link } from 'react-router';
+import { useNavigate, useLocation, Link } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
@@ -10,18 +10,36 @@ type LoginFormValues = {
   password: string;
 };
 
+type LoginLocationState = {
+  from?: string;
+  reason?: string;
+};
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>();
   const [isLoading, setIsLoading] = useState(false);
+
+  const state = (location.state as LoginLocationState | null) ?? {};
+  // Where to send the user after a successful login. Defaults to home, but
+  // when they were redirected here (e.g. from the booking flow) we send them
+  // back to exactly where they were headed.
+  const redirectTo = state.from ?? '/';
+
+  useEffect(() => {
+    if (state.reason === 'booking') {
+      toast.info('Please log in to start booking your appointment.');
+    }
+  }, [state.reason]);
 
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     try {
       await login(data.email, data.password);
       toast.success('Logged in successfully!');
-      navigate('/');
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Login failed. Please try again.');
     } finally {
@@ -61,7 +79,7 @@ export default function Login() {
       </form>
       
       <p className="mt-4 text-center text-sm text-gray-600">
-        Don't have an account? <Link to="/register" className="text-blue-600 hover:underline">Register here</Link>
+        Don't have an account? <Link to="/register" state={location.state} className="text-blue-600 hover:underline">Register here</Link>
       </p>
       
       <div className="mt-6 pt-4 border-t border-gray-100 text-xs text-center text-gray-500">
