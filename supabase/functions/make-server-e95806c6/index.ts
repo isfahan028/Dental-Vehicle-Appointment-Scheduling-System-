@@ -597,7 +597,7 @@ app.post('/make-server-e95806c6/init-data', async (c) => {
         location: 'Westside Community Center',
         latitude: 40.7484,
         longitude: -73.9857,
-        is_available: false,
+        is_available: true,
         image_url: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
       },
     ];
