@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
+import { Link } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
 import type { Appointment, AppointmentStatus, DentalVehicle, User as UserType } from '../types';
 import { Button } from '../components/ui/Button';
+import { VehicleFormModal } from '../components/admin/VehicleFormModal';
 import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search } from 'lucide-react';
 
 const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
@@ -16,6 +18,8 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'appointments' | 'vehicles' | 'users'>('appointments');
   const [apptFilter, setApptFilter] = useState<AppointmentFilter>('All');
   const [apptSearch, setApptSearch] = useState('');
+  // null = closed; { vehicle: null } = add; { vehicle: X } = edit
+  const [vehicleForm, setVehicleForm] = useState<{ vehicle: DentalVehicle | null } | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
@@ -99,6 +103,16 @@ export default function AdminDashboard() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update appointment');
     }
+  };
+
+  const handleVehicleSaved = (saved: DentalVehicle) => {
+    setVehicles(prev =>
+      prev.some(v => v.id === saved.id)
+        ? prev.map(v => (v.id === saved.id ? saved : v))
+        : [...prev, saved],
+    );
+    setVehicleForm(null);
+    toast.success('Vehicle saved');
   };
 
   const toggleUserStatus = async (id: string) => {
@@ -315,19 +329,39 @@ export default function AdminDashboard() {
               <div className="space-y-2 text-gray-600 mb-6">
                 <p className="flex items-center gap-2 text-sm"><MapPin size={16} /> {vehicle.location}</p>
                 <p className="flex items-center gap-2 text-sm"><Clock size={16} /> 9AM - 5PM</p>
+                {vehicle.latitude != null && vehicle.longitude != null && (
+                  <p className="text-xs text-gray-400">
+                    {vehicle.latitude}, {vehicle.longitude}
+                  </p>
+                )}
               </div>
               <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                <Button variant="outline" size="sm">Edit Details</Button>
-                <button className="text-blue-600 text-sm font-medium hover:underline">View Schedule</button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setVehicleForm({ vehicle })}
+                >
+                  Edit Details
+                </Button>
+                <Link
+                  to={`/calendar?vehicleId=${vehicle.id}`}
+                  className="text-blue-600 text-sm font-medium hover:underline"
+                >
+                  View Schedule
+                </Link>
               </div>
             </div>
           ))}
-          <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all min-h-[200px]">
-            <div className="bg-gray-100 p-4 rounded-full mb-3 group-hover:bg-blue-100">
+          <button
+            type="button"
+            onClick={() => setVehicleForm({ vehicle: null })}
+            className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 transition-all min-h-[200px]"
+          >
+            <div className="bg-gray-100 p-4 rounded-full mb-3">
               <Settings className="w-6 h-6" />
             </div>
             <span className="font-medium">+ Add New Vehicle</span>
-          </div>
+          </button>
         </div>
       )}
 
@@ -370,6 +404,15 @@ export default function AdminDashboard() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {vehicleForm && accessToken && (
+        <VehicleFormModal
+          vehicle={vehicleForm.vehicle}
+          accessToken={accessToken}
+          onClose={() => setVehicleForm(null)}
+          onSaved={handleVehicleSaved}
+        />
       )}
     </div>
   );

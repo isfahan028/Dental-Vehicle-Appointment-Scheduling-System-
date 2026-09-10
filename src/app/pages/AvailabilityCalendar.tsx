@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, CalendarDays, Check, X } from 'lucide-react';
 import { useAvailability } from '../hooks/useAvailability';
@@ -24,7 +24,9 @@ export default function AvailabilityCalendar() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [selected, setSelected] = useState<string | null>(null);
-  const [vehicleId, setVehicleId] = useState<string>(ALL);
+  const [searchParams] = useSearchParams();
+  // Pre-select a unit when linked here from the admin "View Schedule" button.
+  const [vehicleId, setVehicleId] = useState<string>(searchParams.get('vehicleId') ?? ALL);
 
   // Only units that are actually in service count toward availability.
   const activeVehicles = useMemo(
