@@ -203,6 +203,37 @@ export async function createService(serviceData: Omit<Service, 'id'>, accessToke
   return data;
 }
 
+export async function updateService(id: string, updates: Partial<Service>, accessToken: string) {
+  const response = await fetch(`${API_BASE_URL}/services/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(accessToken),
+    body: JSON.stringify(updates),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to update service');
+  }
+
+  return data;
+}
+
+export async function deleteService(id: string, accessToken: string) {
+  const response = await fetch(`${API_BASE_URL}/services/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(accessToken),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to delete service');
+  }
+
+  return data;
+}
+
 // ===== APPOINTMENT API =====
 
 export async function getAppointments(accessToken: string): Promise<Appointment[]> {

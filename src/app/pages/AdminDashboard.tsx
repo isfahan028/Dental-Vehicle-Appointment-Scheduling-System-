@@ -2,11 +2,12 @@ import { useCallback, useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
-import type { Appointment, AppointmentStatus, DentalVehicle, User as UserType } from '../types';
+import type { Appointment, AppointmentStatus, DentalVehicle, Service, User as UserType } from '../types';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { VehicleFormModal } from '../components/admin/VehicleFormModal';
-import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search } from 'lucide-react';
+import { ServiceFormModal } from '../components/admin/ServiceFormModal';
+import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag } from 'lucide-react';
 
 const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
 type AppointmentFilter = (typeof APPOINTMENT_FILTERS)[number];
@@ -16,15 +17,18 @@ import { usePolling } from '../hooks/usePolling';
 
 export default function AdminDashboard() {
   const { user, isAdmin, accessToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<'appointments' | 'vehicles' | 'users'>('appointments');
+  const [activeTab, setActiveTab] = useState<'appointments' | 'vehicles' | 'services' | 'users'>('appointments');
   const [apptFilter, setApptFilter] = useState<AppointmentFilter>('All');
   const [apptSearch, setApptSearch] = useState('');
   // null = closed; { vehicle: null } = add; { vehicle: X } = edit
   const [vehicleForm, setVehicleForm] = useState<{ vehicle: DentalVehicle | null } | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<DentalVehicle | null>(null);
+  const [serviceForm, setServiceForm] = useState<{ service: Service | null } | null>(null);
+  const [deletingService, setDeletingService] = useState<Service | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -33,13 +37,15 @@ export default function AdminDashboard() {
   const loadAll = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const [appointmentsData, vehiclesData, usersData] = await Promise.all([
+      const [appointmentsData, vehiclesData, servicesData, usersData] = await Promise.all([
         api.getAppointments(accessToken),
         api.getVehicles(),
+        api.getServices(),
         api.getAllUsers(accessToken),
       ]);
       setAppointments(appointmentsData);
       setVehicles(vehiclesData);
+      setServices(servicesData);
       setUsers(usersData);
     } catch (error) {
       console.error('Failed to load admin data:', error);
@@ -135,6 +141,33 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleServiceSaved = (saved: Service) => {
+    setServices(prev =>
+      prev.some(s => s.id === saved.id)
+        ? prev.map(s => (s.id === saved.id ? saved : s))
+        : [...prev, saved],
+    );
+    setServiceForm(null);
+    toast.success('Service saved');
+  };
+
+  const confirmDeleteService = async () => {
+    if (!accessToken || !deletingService) return;
+
+    setDeleteBusy(true);
+    try {
+      await api.deleteService(deletingService.id, accessToken);
+      setServices(prev => prev.filter(s => s.id !== deletingService.id));
+      toast.success('Service deleted');
+    } catch (error) {
+      // e.g. 409 when the service still has appointments
+      toast.error(error instanceof Error ? error.message : 'Failed to delete service');
+    } finally {
+      setDeleteBusy(false);
+      setDeletingService(null);
+    }
+  };
+
   const toggleUserStatus = async (id: string) => {
     if (!accessToken) return;
 
@@ -168,7 +201,7 @@ export default function AdminDashboard() {
           <p className="text-gray-500">Manage your dental fleet and appointments.</p>
         </div>
         <div className="flex bg-gray-100 p-1 rounded-lg">
-          {(['appointments', 'vehicles', 'users'] as const).map((tab) => (
+          {(['appointments', 'vehicles', 'services', 'users'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -394,6 +427,51 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {activeTab === 'services' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {services.map((service) => (
+            <div key={service.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start mb-3">
+                <h3 className="text-lg font-bold text-gray-900">{service.name}</h3>
+                <span className="text-lg font-bold text-blue-600">฿{service.price ?? 0}</span>
+              </div>
+              <div className="space-y-2 text-gray-600 mb-6">
+                <p className="flex items-center gap-2 text-sm"><Clock size={16} /> {service.duration_minutes} min</p>
+                {service.description && (
+                  <p className="text-sm text-gray-500">{service.description}</p>
+                )}
+              </div>
+              <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setServiceForm({ service })}
+                >
+                  Edit Details
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setDeletingService(service)}
+                  className="text-red-600 text-sm font-medium hover:underline"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setServiceForm({ service: null })}
+            className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 transition-all min-h-[200px]"
+          >
+            <div className="bg-gray-100 p-4 rounded-full mb-3">
+              <Tag className="w-6 h-6" />
+            </div>
+            <span className="font-medium">+ Add New Service</span>
+          </button>
+        </div>
+      )}
+
       {activeTab === 'users' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
@@ -453,6 +531,27 @@ export default function AdminDashboard() {
           busy={deleteBusy}
           onConfirm={confirmDeleteVehicle}
           onCancel={() => setDeletingVehicle(null)}
+        />
+      )}
+
+      {serviceForm && accessToken && (
+        <ServiceFormModal
+          service={serviceForm.service}
+          accessToken={accessToken}
+          onClose={() => setServiceForm(null)}
+          onSaved={handleServiceSaved}
+        />
+      )}
+
+      {deletingService && (
+        <ConfirmDialog
+          danger
+          title="Delete this service?"
+          message={`"${deletingService.name}" will be permanently removed. This can't be undone.`}
+          confirmLabel="Delete"
+          busy={deleteBusy}
+          onConfirm={confirmDeleteService}
+          onCancel={() => setDeletingService(null)}
         />
       )}
     </div>

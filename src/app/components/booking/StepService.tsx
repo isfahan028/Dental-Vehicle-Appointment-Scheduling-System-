@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Service } from '../../types';
 import * as api from '../../lib/api';
-import { Check, Clock, DollarSign } from 'lucide-react';
+import { Check, Clock } from 'lucide-react';
 
 interface StepServiceProps {
   selectedServiceId: string;
@@ -67,7 +67,7 @@ export const StepService: React.FC<StepServiceProps> = ({ selectedServiceId, onS
                   <span>{service.duration_minutes} min</span>
                 </div>
                 <div className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded">
-                  <DollarSign size={14} />
+                  <span className="font-semibold">฿</span>
                   <span>{service.price}</span>
                 </div>
               </div>

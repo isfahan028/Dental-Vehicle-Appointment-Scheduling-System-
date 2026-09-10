@@ -340,6 +340,75 @@ app.post('/make-server-e95806c6/services', async (c) => {
   }
 });
 
+// Update service (admin only)
+app.put('/make-server-e95806c6/services/:id', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  const userProfile = await db.getUser(userId);
+  if (!userProfile || userProfile.role !== 'admin') {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+
+  try {
+    const id = c.req.param('id');
+    const existingService = await db.getService(id);
+
+    if (!existingService) {
+      return c.json({ error: 'Service not found' }, 404);
+    }
+
+    const updates = await c.req.json();
+    const updatedService = await db.updateService(id, updates);
+
+    return c.json({ service: updatedService, message: 'Service updated successfully' });
+  } catch (error) {
+    console.error(`Error updating service: ${error}`);
+    return c.json({ error: `Failed to update service: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
+// Delete service (admin only). Refused if the service still has appointments,
+// so booking history is never silently cascaded away.
+app.delete('/make-server-e95806c6/services/:id', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  const userProfile = await db.getUser(userId);
+  if (!userProfile || userProfile.role !== 'admin') {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+
+  try {
+    const id = c.req.param('id');
+    const existingService = await db.getService(id);
+
+    if (!existingService) {
+      return c.json({ error: 'Service not found' }, 404);
+    }
+
+    const apptCount = await db.countServiceAppointments(id);
+    if (apptCount > 0) {
+      return c.json({
+        error: `This service has ${apptCount} appointment(s). Reassign or cancel them before deleting.`,
+      }, 409);
+    }
+
+    await db.deleteService(id);
+
+    return c.json({ message: 'Service deleted successfully' });
+  } catch (error) {
+    console.error(`Error deleting service: ${error}`);
+    return c.json({ error: `Failed to delete service: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
 // ===== APPOINTMENT ROUTES =====
 
 // Get user's appointments

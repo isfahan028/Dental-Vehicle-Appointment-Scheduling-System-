@@ -194,6 +194,37 @@ export async function createService(service: any) {
   return mapService(data);
 }
 
+export async function updateService(id: string, updates: any) {
+  const supabase = client();
+  const dbUpdates: any = {};
+  if (updates.name !== undefined) dbUpdates.service_name = updates.name;
+  if (updates.description !== undefined) dbUpdates.description = updates.description;
+  if (updates.duration_minutes !== undefined) dbUpdates.duration_minutes = updates.duration_minutes;
+  if (updates.price !== undefined) dbUpdates.price = updates.price;
+
+  const { data, error } = await supabase.from('services').update(dbUpdates).eq('service_id', parseInt(id)).select().maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapService(data) : null;
+}
+
+// How many appointments (any status) reference this service. Used to block
+// deletion of a service that still has history / bookings.
+export async function countServiceAppointments(id: string) {
+  const supabase = client();
+  const { count, error } = await supabase
+    .from('appointments')
+    .select('appointment_id', { count: 'exact', head: true })
+    .eq('service_id', parseInt(id));
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+export async function deleteService(id: string) {
+  const supabase = client();
+  const { error } = await supabase.from('services').delete().eq('service_id', parseInt(id));
+  if (error) throw new Error(error.message);
+}
+
 // ===== APPOINTMENTS =====
 
 const mapAppointment = (dbAppt: any) => {

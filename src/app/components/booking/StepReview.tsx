@@ -137,7 +137,7 @@ export const StepReview: React.FC<StepReviewProps> = ({ formData, onConfirm, onP
               Total Estimated Cost
             </div>
             <div className="text-2xl font-bold text-gray-900">
-              ${service.price}
+              ฿{service.price}
             </div>
           </div>
         )}
