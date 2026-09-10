@@ -5,6 +5,7 @@ import type { DentalVehicle } from '../types';
 import { Button } from '../components/ui/Button';
 import { MapPin, Clock, Calendar, CheckCircle2, ArrowRight, Info } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import { VehicleMap } from '../components/VehicleMap';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { usePolling } from '../hooks/usePolling';
@@ -133,6 +134,17 @@ export default function Home() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Where To Find Us — live map of the fleet */}
+      <section className="container mx-auto px-4">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Where to Find Us</h2>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Our mobile clinics move around the city. Here&apos;s where each unit is parked right now.
+          </p>
+        </div>
+        <VehicleMap vehicles={vehicles} />
       </section>
 
       {/* Vehicles Section */}
