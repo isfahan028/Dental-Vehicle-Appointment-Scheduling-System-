@@ -68,19 +68,21 @@ export function VehicleFormModal({ vehicle, accessToken, onClose, onSaved }: Veh
     setSubmitting(true);
     setError(null);
 
+    // Send explicit null (not undefined) for a cleared coordinate so an edit
+    // actually removes it — that's how a vehicle gets taken off the map.
     const payload = {
       name: name.trim(),
       location: location.trim(),
       image_url: imageUrl.trim(),
       is_available: isAvailable,
-      latitude: latitude.trim() === '' ? undefined : Number(latitude),
-      longitude: longitude.trim() === '' ? undefined : Number(longitude),
+      latitude: latitude.trim() === '' ? null : Number(latitude),
+      longitude: longitude.trim() === '' ? null : Number(longitude),
     };
 
     try {
       const res = isEdit
         ? await api.updateVehicle(vehicle!.id, payload, accessToken)
-        : await api.createVehicle(payload as Omit<DentalVehicle, 'id'>, accessToken);
+        : await api.createVehicle(payload, accessToken);
       onSaved(res.vehicle as DentalVehicle);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save vehicle.');

@@ -15,8 +15,8 @@ export type DentalVehicle = {
   id: string;
   name: string;
   location: string;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   is_available: boolean;
   image_url: string;
 };
