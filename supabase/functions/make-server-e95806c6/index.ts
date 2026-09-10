@@ -582,7 +582,7 @@ app.post('/make-server-e95806c6/init-data', async (c) => {
         latitude: 40.7644,
         longitude: -73.9732,
         is_available: true,
-        image_url: 'https://images.unsplash.com/photo-1517166365435-027581788225?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+        image_url: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
       },
       {
         name: 'Dental Unit Beta',
@@ -590,7 +590,7 @@ app.post('/make-server-e95806c6/init-data', async (c) => {
         latitude: 40.7128,
         longitude: -74.0060,
         is_available: true,
-        image_url: 'https://images.unsplash.com/photo-1629909615184-74f495363b63?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+        image_url: 'https://images.unsplash.com/photo-1598256989800-fe5f95da9787?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
       },
       {
         name: 'Mobile Clinic Gamma',
