@@ -31,6 +31,8 @@ export default function Login() {
   useEffect(() => {
     if (state.reason === 'booking') {
       toast.info('Please log in to start booking your appointment.');
+    } else if (state.reason === 'admin') {
+      toast.info('Please log in with an admin account to continue.');
     }
   }, [state.reason]);
 

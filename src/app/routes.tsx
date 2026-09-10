@@ -27,7 +27,14 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "appointments", Component: Appointments },
-      { path: "admin", Component: AdminDashboard },
+      {
+        path: "admin",
+        element: (
+          <RequireAuth requireAdmin>
+            <AdminDashboard />
+          </RequireAuth>
+        ),
+      },
       { path: "*", Component: () => <div className="p-8 text-center text-xl">404 - Page Not Found</div> },
     ],
   },

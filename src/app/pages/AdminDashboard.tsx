@@ -2,7 +2,6 @@ import { useCallback, useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
 import type { Appointment, AppointmentStatus, DentalVehicle, User as UserType } from '../types';
-import { Navigate } from 'react-router';
 import { Button } from '../components/ui/Button';
 import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity } from 'lucide-react';
 import { toast } from 'sonner';
@@ -55,10 +54,6 @@ export default function AdminDashboard() {
   useRealtimeRefetch('appointments', refetchAppointments, { enabled: canLoad });
   // Vehicles / users change rarely — a periodic refresh is enough.
   usePolling(loadAll, { intervalMs: 30_000, enabled: canLoad });
-
-  if (!user || !isAdmin) {
-    return <Navigate to="/" />;
-  }
 
   if (isLoading) {
     return (
