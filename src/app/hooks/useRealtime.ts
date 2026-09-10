@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 /**
@@ -21,6 +21,12 @@ export function useRealtimeRefetch(
     onChangeRef.current = onChange;
   });
 
+  // Unique per hook instance. supabase-js reuses a channel by its topic string,
+  // and calling `.on()` on an already-`subscribe()`d channel throws — which
+  // happens if two components subscribe to the same table at once. A unique
+  // topic gives each instance its own channel.
+  const instanceId = useId();
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -31,7 +37,7 @@ export function useRealtimeRefetch(
     };
 
     const channel = supabase
-      .channel(`realtime:${table}`)
+      .channel(`realtime:${table}:${instanceId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table }, fire)
       .subscribe();
 
@@ -39,5 +45,5 @@ export function useRealtimeRefetch(
       clearTimeout(timer);
       supabase.removeChannel(channel);
     };
-  }, [table, enabled, debounceMs]);
+  }, [table, enabled, debounceMs, instanceId]);
 }

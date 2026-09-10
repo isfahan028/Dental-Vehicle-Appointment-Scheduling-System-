@@ -1,8 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
-import { useAvailability } from '../../hooks/useAvailability';
-import { slotKey } from '../../lib/slots';
+import { checkSlotTaken } from '../../hooks/useAvailability';
 import * as api from '../../lib/api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,7 +21,6 @@ function isSlotConflict(message: string): boolean {
 
 export const BookingWizard: React.FC = () => {
   const { user, accessToken, logout } = useAuth();
-  const { reload: reloadAvailability } = useAvailability();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preSelectedVehicleId = searchParams.get('vehicleId');
@@ -72,13 +70,13 @@ export const BookingWizard: React.FC = () => {
   };
 
   // Slot is gone: don't book, don't celebrate — send the user back to the
-  // time picker with a clear, persistent explanation and fresh availability.
+  // time picker with a clear, persistent explanation. StepDateTime re-fetches
+  // availability on mount, so the taken slot shows as crossed-out there.
   const handleSlotTaken = () => {
     setConflictNotice(SLOT_TAKEN_MESSAGE);
     toast.error(SLOT_TAKEN_MESSAGE, { duration: 6000 });
     setFormData(prev => ({ ...prev, time: '' }));
     setCurrentStep(DATETIME_STEP);
-    void reloadAvailability();
   };
 
   const handleConfirm = async () => {
@@ -103,8 +101,7 @@ export const BookingWizard: React.FC = () => {
       // Pre-flight check: confirm the slot is STILL free right now, before we
       // create anything. This is what stops the "Appointment booked!" /
       // "slot already taken" whiplash — a taken slot never reaches the API.
-      const takenSlots = await reloadAvailability();
-      if (takenSlots?.has(slotKey(vehicleId, date, time))) {
+      if (await checkSlotTaken(vehicleId, date, time)) {
         handleSlotTaken();
         return;
       }

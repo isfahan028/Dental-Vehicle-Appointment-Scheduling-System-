@@ -28,6 +28,35 @@ type State = {
 };
 
 /**
+ * One-off, point-in-time check: is this exact slot already held by a
+ * non-cancelled appointment? Reads Postgres directly with the anon key — no
+ * subscription, so it's safe to call from anywhere (e.g. right before booking).
+ *
+ * Returns `true` if taken, `false` if free, and `null` if the check itself
+ * failed (the caller decides whether to proceed).
+ */
+export async function checkSlotTaken(
+  vehicleId: string,
+  date: string,
+  time: string,
+): Promise<boolean | null> {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('appointment_time, status')
+    .eq('vehicle_id', Number(vehicleId))
+    .eq('appointment_date', date)
+    .neq('status', 'Cancelled');
+
+  if (error) return null;
+
+  // `appointment_time` is a Postgres TIME ("HH:MM:SS"); compare on "HH:MM".
+  const want = normalizeTime(time);
+  return (data ?? []).some(
+    (row) => normalizeTime(row.appointment_time as string) === want,
+  );
+}
+
+/**
  * Live view of every vehicle booking, read straight from Postgres with the
  * public anon key (migration 04 grants anon SELECT on `appointments`, and the
  * rows carry no personal data — just vehicle id + date + time + status).
@@ -45,10 +74,7 @@ export function useAvailability() {
     error: null,
   });
 
-  // Returns the freshly-fetched set of taken slot keys (or null on failure) so
-  // callers can do a just-in-time conflict check right before booking, without
-  // waiting for React state / polling to catch up.
-  const reload = useCallback(async (): Promise<Set<string> | null> => {
+  const reload = useCallback(async () => {
     try {
       const [vehiclesRes, apptRes] = await Promise.all([
         supabase
@@ -80,17 +106,12 @@ export function useAvailability() {
         }));
 
       setState({ vehicles, bookings, loading: false, error: null });
-
-      const freshSet = new Set<string>();
-      for (const b of bookings) freshSet.add(slotKey(b.vehicleId, b.date, b.time));
-      return freshSet;
     } catch (err) {
       setState((s) => ({
         ...s,
         loading: false,
         error: err instanceof Error ? err.message : 'Failed to load availability',
       }));
-      return null;
     }
   }, []);
 
