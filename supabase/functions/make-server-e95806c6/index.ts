@@ -489,6 +489,9 @@ app.post('/make-server-e95806c6/appointments', async (c) => {
         date,
         time,
         status: 'Pending',
+        // Snapshot the service price at booking time so later catalogue
+        // edits never rewrite this appointment's cost.
+        price: service.price ?? null,
       });
     } catch (err) {
       // Lost the race: another request claimed the slot between the check
@@ -512,42 +515,57 @@ app.post('/make-server-e95806c6/appointments', async (c) => {
   }
 });
 
-// Update appointment status (admin only/cancel only for users)
+// Update an appointment. Users may only cancel their own; admins may also
+// change status and set a per-appointment price.
 app.put('/make-server-e95806c6/appointments/:id', async (c) => {
   const { userId, error: authError } = await verifyAuth(c);
-  
+
   if (authError || !userId) {
     return c.json({ error: authError || 'Unauthorized' }, 401);
   }
 
   try {
     const id = c.req.param('id');
-    const { status } = await c.req.json();
+    const { status, price } = await c.req.json();
 
     const appointment = await db.getAppointment(id);
-    
+
     if (!appointment) {
       return c.json({ error: 'Appointment not found' }, 404);
     }
 
     const userProfile = await db.getUser(userId);
-    
-    // Users can only cancel their own appointments
-    // Admins can update any appointment status
-    if (userProfile?.role !== 'admin' && appointment.user_id !== userId) {
+    const isAdmin = userProfile?.role === 'admin';
+
+    // Users can only act on their own appointments
+    if (!isAdmin && appointment.user_id !== userId) {
       return c.json({ error: 'Not authorized to update this appointment' }, 403);
     }
 
-    // Users can only cancel, not approve/complete
-    if (userProfile?.role !== 'admin' && status !== 'Cancelled') {
+    // Users can only cancel — no status changes, no price changes
+    if (!isAdmin && (status !== 'Cancelled' || price !== undefined)) {
       return c.json({ error: 'Only cancellation is allowed' }, 403);
     }
 
-    const updatedAppointment = await db.updateAppointment(id, { status });
+    const updates: { status?: string; price?: number } = {};
+    if (status !== undefined) updates.status = status;
+    if (price !== undefined) {
+      const p = Number(price);
+      if (Number.isNaN(p) || p < 0) {
+        return c.json({ error: 'Price must be a number of 0 or more' }, 400);
+      }
+      updates.price = p;
+    }
 
-    return c.json({ 
-      appointment: updatedAppointment, 
-      message: 'Appointment updated successfully' 
+    if (Object.keys(updates).length === 0) {
+      return c.json({ error: 'Nothing to update' }, 400);
+    }
+
+    const updatedAppointment = await db.updateAppointment(id, updates);
+
+    return c.json({
+      appointment: updatedAppointment,
+      message: 'Appointment updated successfully'
     });
   } catch (error) {
     console.error(`Error updating appointment: ${error}`);

@@ -294,6 +294,23 @@ export async function updateAppointment(
   return data;
 }
 
+// Admin only: set a per-appointment price override.
+export async function setAppointmentPrice(id: string, price: number, accessToken: string) {
+  const response = await fetch(`${API_BASE_URL}/appointments/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(accessToken),
+    body: JSON.stringify({ price }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to update price');
+  }
+
+  return data;
+}
+
 export async function deleteAppointment(id: string, accessToken: string) {
   const response = await fetch(`${API_BASE_URL}/appointments/${id}`, {
     method: 'DELETE',

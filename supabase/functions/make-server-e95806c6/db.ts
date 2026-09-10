@@ -236,6 +236,7 @@ const mapAppointment = (dbAppt: any) => {
     date: dbAppt.appointment_date,
     time: dbAppt.appointment_time,
     status: dbAppt.status,
+    price: dbAppt.price != null ? Number(dbAppt.price) : null,
     created_at: dbAppt.created_at,
   };
 
@@ -296,6 +297,7 @@ export async function createAppointment(appt: any) {
     appointment_date: appt.date,
     appointment_time: appt.time,
     status: appt.status || 'Pending',
+    price: appt.price ?? null,
   }).select(`
     *,
     dental_vehicles(vehicle_name),
@@ -316,6 +318,7 @@ export async function updateAppointment(id: string, updates: any) {
   const supabase = client();
   const dbUpdates: any = {};
   if (updates.status !== undefined) dbUpdates.status = updates.status;
+  if (updates.price !== undefined) dbUpdates.price = updates.price;
 
   const { data, error } = await supabase.from('appointments').update(dbUpdates).eq('appointment_id', parseInt(id)).select(`
     *,

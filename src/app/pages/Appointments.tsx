@@ -123,7 +123,7 @@ export default function Appointments() {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-blue-500" />
                       <span className="font-medium">{new Date(appointment.date).toLocaleDateString()}</span>
@@ -136,6 +136,12 @@ export default function Appointments() {
                       <MapPin className="w-4 h-4 text-blue-500" />
                       <span className="font-medium">{appointment.vehicle_name}</span>
                     </div>
+                    {appointment.price != null && (
+                      <div className="flex items-center gap-2">
+                        <span className="w-4 text-center font-semibold text-blue-500">฿</span>
+                        <span className="font-medium">{appointment.price}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

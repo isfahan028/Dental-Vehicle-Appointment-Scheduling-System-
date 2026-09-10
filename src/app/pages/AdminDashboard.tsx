@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { VehicleFormModal } from '../components/admin/VehicleFormModal';
 import { ServiceFormModal } from '../components/admin/ServiceFormModal';
-import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil } from 'lucide-react';
 
 const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
 type AppointmentFilter = (typeof APPOINTMENT_FILTERS)[number];
@@ -20,6 +20,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'appointments' | 'vehicles' | 'services' | 'users'>('appointments');
   const [apptFilter, setApptFilter] = useState<AppointmentFilter>('All');
   const [apptSearch, setApptSearch] = useState('');
+  const [editingPrice, setEditingPrice] = useState<{ id: string; value: string } | null>(null);
   // null = closed; { vehicle: null } = add; { vehicle: X } = edit
   const [vehicleForm, setVehicleForm] = useState<{ vehicle: DentalVehicle | null } | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<DentalVehicle | null>(null);
@@ -111,6 +112,26 @@ export default function AdminDashboard() {
       toast.success(`Appointment marked as ${newStatus}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update appointment');
+    }
+  };
+
+  const savePrice = async () => {
+    if (!accessToken || !editingPrice) return;
+
+    const p = Number(editingPrice.value);
+    if (editingPrice.value.trim() === '' || Number.isNaN(p) || p < 0) {
+      toast.error('Price must be a number of 0 or more');
+      return;
+    }
+
+    const { id } = editingPrice;
+    try {
+      await api.setAppointmentPrice(id, p, accessToken);
+      setAppointments(prev => prev.map(a => (a.id === id ? { ...a, price: p } : a)));
+      toast.success('Price updated');
+      setEditingPrice(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update price');
     }
   };
 
@@ -304,6 +325,7 @@ export default function AdminDashboard() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -311,7 +333,7 @@ export default function AdminDashboard() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {visibleAppointments.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-400">
+                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-400">
                       {appointments.length === 0
                         ? 'No appointments yet.'
                         : 'No appointments match your filters.'}
@@ -332,8 +354,39 @@ export default function AdminDashboard() {
                       <div className="text-sm text-gray-900">{appt.date}</div>
                       <div className="text-sm text-gray-500">{appt.time}</div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {editingPrice?.id === appt.id ? (
+                        <span className="flex items-center gap-1">
+                          <span className="text-gray-400">฿</span>
+                          <input
+                            autoFocus
+                            type="text"
+                            inputMode="decimal"
+                            value={editingPrice.value}
+                            onChange={(e) => setEditingPrice({ id: appt.id, value: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') savePrice();
+                              if (e.key === 'Escape') setEditingPrice(null);
+                            }}
+                            className="w-20 rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <button onClick={savePrice} className="text-green-600 hover:underline">Save</button>
+                          <button onClick={() => setEditingPrice(null)} className="text-gray-400 hover:underline">Cancel</button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingPrice({ id: appt.id, value: appt.price != null ? String(appt.price) : '' })}
+                          className="group inline-flex items-center gap-1 text-gray-900 hover:text-blue-600"
+                          title="Edit price"
+                        >
+                          {appt.price != null ? `฿${appt.price}` : <span className="text-gray-400">—</span>}
+                          <Pencil size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
+                        </button>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
                         ${appt.status === 'Approved' ? 'bg-green-100 text-green-800' : 
                           appt.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 
                           appt.status === 'Cancelled' ? 'bg-red-100 text-red-800' :

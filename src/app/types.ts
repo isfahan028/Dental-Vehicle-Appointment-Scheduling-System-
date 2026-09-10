@@ -39,6 +39,7 @@ export type Appointment = {
   date: string; // ISO date string YYYY-MM-DD
   time: string; // HH:mm
   status: AppointmentStatus;
+  price?: number | null; // snapshotted at booking, admin-editable per appointment
   created_at: string;
   // Joined fields for UI convenience
   vehicle_name?: string;
