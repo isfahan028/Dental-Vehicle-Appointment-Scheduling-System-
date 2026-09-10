@@ -218,10 +218,18 @@ export default function AdminDashboard() {
                           Approve
                         </Button>
                       )}
-                      {appt.status !== 'Cancelled' && (
+                      {appt.status === 'Approved' && (
+                        <Button size="sm" onClick={() => handleStatusChange(appt.id, 'Completed')} className="bg-blue-600 hover:bg-blue-700 text-white">
+                          Complete
+                        </Button>
+                      )}
+                      {(appt.status === 'Pending' || appt.status === 'Approved') && (
                         <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleStatusChange(appt.id, 'Cancelled')}>
                           Cancel
                         </Button>
+                      )}
+                      {(appt.status === 'Completed' || appt.status === 'Cancelled') && (
+                        <span className="text-gray-400">—</span>
                       )}
                     </td>
                   </tr>
