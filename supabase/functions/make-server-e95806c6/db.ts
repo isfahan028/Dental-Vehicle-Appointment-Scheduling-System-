@@ -139,6 +139,24 @@ export async function updateVehicle(id: string, updates: any) {
   return data ? mapVehicle(data) : null;
 }
 
+// How many appointments (any status) reference this vehicle. Used to block
+// deletion of a vehicle that still has history / bookings.
+export async function countVehicleAppointments(id: string) {
+  const supabase = client();
+  const { count, error } = await supabase
+    .from('appointments')
+    .select('appointment_id', { count: 'exact', head: true })
+    .eq('vehicle_id', parseInt(id));
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+export async function deleteVehicle(id: string) {
+  const supabase = client();
+  const { error } = await supabase.from('dental_vehicles').delete().eq('vehicle_id', parseInt(id));
+  if (error) throw new Error(error.message);
+}
+
 // ===== SERVICES =====
 
 const mapService = (dbService: any) => ({

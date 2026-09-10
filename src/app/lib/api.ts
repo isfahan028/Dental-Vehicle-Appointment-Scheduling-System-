@@ -145,6 +145,21 @@ export async function updateVehicle(id: string, updates: Partial<DentalVehicle>,
   return data;
 }
 
+export async function deleteVehicle(id: string, accessToken: string) {
+  const response = await fetch(`${API_BASE_URL}/vehicles/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(accessToken),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to delete vehicle');
+  }
+
+  return data;
+}
+
 // ===== SERVICE API =====
 
 export async function getServices(): Promise<Service[]> {

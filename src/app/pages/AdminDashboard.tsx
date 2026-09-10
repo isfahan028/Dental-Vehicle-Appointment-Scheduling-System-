@@ -115,6 +115,20 @@ export default function AdminDashboard() {
     toast.success('Vehicle saved');
   };
 
+  const handleDeleteVehicle = async (vehicle: DentalVehicle) => {
+    if (!accessToken) return;
+    if (!confirm(`Delete "${vehicle.name}"? This can't be undone.`)) return;
+
+    try {
+      await api.deleteVehicle(vehicle.id, accessToken);
+      setVehicles(prev => prev.filter(v => v.id !== vehicle.id));
+      toast.success('Vehicle deleted');
+    } catch (error) {
+      // e.g. 409 when the vehicle still has appointments
+      toast.error(error instanceof Error ? error.message : 'Failed to delete vehicle');
+    }
+  };
+
   const toggleUserStatus = async (id: string) => {
     if (!accessToken) return;
 
@@ -343,12 +357,21 @@ export default function AdminDashboard() {
                 >
                   Edit Details
                 </Button>
-                <Link
-                  to={`/calendar?vehicleId=${vehicle.id}`}
-                  className="text-blue-600 text-sm font-medium hover:underline"
-                >
-                  View Schedule
-                </Link>
+                <div className="flex items-center gap-3">
+                  <Link
+                    to={`/calendar?vehicleId=${vehicle.id}`}
+                    className="text-blue-600 text-sm font-medium hover:underline"
+                  >
+                    View Schedule
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteVehicle(vehicle)}
+                    className="text-red-600 text-sm font-medium hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}

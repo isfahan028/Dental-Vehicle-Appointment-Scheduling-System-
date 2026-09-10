@@ -257,11 +257,49 @@ app.put('/make-server-e95806c6/vehicles/:id', async (c) => {
 
     const updates = await c.req.json();
     const updatedVehicle = await db.updateVehicle(id, updates);
-    
+
     return c.json({ vehicle: updatedVehicle, message: 'Vehicle updated successfully' });
   } catch (error) {
     console.error(`Error updating vehicle: ${error}`);
     return c.json({ error: `Failed to update vehicle: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
+// Delete vehicle (admin only). Refused if the vehicle still has appointments,
+// so booking history is never silently cascaded away.
+app.delete('/make-server-e95806c6/vehicles/:id', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  const userProfile = await db.getUser(userId);
+  if (!userProfile || userProfile.role !== 'admin') {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+
+  try {
+    const id = c.req.param('id');
+    const existingVehicle = await db.getVehicle(id);
+
+    if (!existingVehicle) {
+      return c.json({ error: 'Vehicle not found' }, 404);
+    }
+
+    const apptCount = await db.countVehicleAppointments(id);
+    if (apptCount > 0) {
+      return c.json({
+        error: `This vehicle has ${apptCount} appointment(s). Cancel or reassign them before deleting.`,
+      }, 409);
+    }
+
+    await db.deleteVehicle(id);
+
+    return c.json({ message: 'Vehicle deleted successfully' });
+  } catch (error) {
+    console.error(`Error deleting vehicle: ${error}`);
+    return c.json({ error: `Failed to delete vehicle: ${error instanceof Error ? error.message : String(error)}` }, 500);
   }
 });
 
