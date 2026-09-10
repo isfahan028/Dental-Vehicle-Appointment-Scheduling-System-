@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
 import type { Appointment, AppointmentStatus, DentalVehicle, User as UserType } from '../types';
 import { Button } from '../components/ui/Button';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { VehicleFormModal } from '../components/admin/VehicleFormModal';
 import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search } from 'lucide-react';
 
@@ -20,6 +21,8 @@ export default function AdminDashboard() {
   const [apptSearch, setApptSearch] = useState('');
   // null = closed; { vehicle: null } = add; { vehicle: X } = edit
   const [vehicleForm, setVehicleForm] = useState<{ vehicle: DentalVehicle | null } | null>(null);
+  const [deletingVehicle, setDeletingVehicle] = useState<DentalVehicle | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
@@ -115,17 +118,20 @@ export default function AdminDashboard() {
     toast.success('Vehicle saved');
   };
 
-  const handleDeleteVehicle = async (vehicle: DentalVehicle) => {
-    if (!accessToken) return;
-    if (!confirm(`Delete "${vehicle.name}"? This can't be undone.`)) return;
+  const confirmDeleteVehicle = async () => {
+    if (!accessToken || !deletingVehicle) return;
 
+    setDeleteBusy(true);
     try {
-      await api.deleteVehicle(vehicle.id, accessToken);
-      setVehicles(prev => prev.filter(v => v.id !== vehicle.id));
+      await api.deleteVehicle(deletingVehicle.id, accessToken);
+      setVehicles(prev => prev.filter(v => v.id !== deletingVehicle.id));
       toast.success('Vehicle deleted');
     } catch (error) {
       // e.g. 409 when the vehicle still has appointments
       toast.error(error instanceof Error ? error.message : 'Failed to delete vehicle');
+    } finally {
+      setDeleteBusy(false);
+      setDeletingVehicle(null);
     }
   };
 
@@ -366,7 +372,7 @@ export default function AdminDashboard() {
                   </Link>
                   <button
                     type="button"
-                    onClick={() => handleDeleteVehicle(vehicle)}
+                    onClick={() => setDeletingVehicle(vehicle)}
                     className="text-red-600 text-sm font-medium hover:underline"
                   >
                     Delete
@@ -435,6 +441,18 @@ export default function AdminDashboard() {
           accessToken={accessToken}
           onClose={() => setVehicleForm(null)}
           onSaved={handleVehicleSaved}
+        />
+      )}
+
+      {deletingVehicle && (
+        <ConfirmDialog
+          danger
+          title="Delete this vehicle?"
+          message={`"${deletingVehicle.name}" will be permanently removed. This can't be undone.`}
+          confirmLabel="Delete"
+          busy={deleteBusy}
+          onConfirm={confirmDeleteVehicle}
+          onCancel={() => setDeletingVehicle(null)}
         />
       )}
     </div>
