@@ -78,14 +78,30 @@ export function VehicleMap({ vehicles }: { vehicles: DentalVehicle[] }) {
     window.setTimeout(() => markerRefs.current[v.id]?.openPopup(), 450);
   };
 
+  // Home polls vehicle data on an interval, which hands us a brand-new
+  // `vehicles` array every time even when nothing actually changed. Keying
+  // the bounds memo off the real coordinate values (not the array reference)
+  // means <FitBounds> only re-fits when a unit is actually added, removed, or
+  // moved — not on every routine refresh, which used to snap the view back
+  // out from under whoever was looking at (or panning) the map.
+  const boundsKey = useMemo(
+    () =>
+      located
+        .map((v) => `${v.id}:${v.latitude.toFixed(5)},${v.longitude.toFixed(5)}`)
+        .sort()
+        .join('|'),
+    [located],
+  );
+
   // Start zoomed out enough to see every unit plus surrounding context.
-  // Memoised so <FitBounds> doesn't re-fit (and fight the user) on every render.
   const bounds = useMemo(() => {
     if (located.length === 0) return null;
     return L.latLngBounds(
       located.map((v) => [v.latitude, v.longitude] as [number, number]),
     ).pad(0.35);
-  }, [located]);
+    // Intentionally keyed on boundsKey, not `located` — see comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boundsKey]);
 
   if (located.length === 0 || !bounds) {
     return (
