@@ -26,6 +26,15 @@ export async function deleteSession(token: string) {
   if (error) throw new Error(error.message);
 }
 
+// Kill every existing session for a user — used when an admin deactivates
+// them, so it takes effect immediately instead of waiting for that session
+// to naturally expire or hit an endpoint that re-checks is_active.
+export async function deleteSessionsByUser(userId: string) {
+  const supabase = client();
+  const { error } = await supabase.from('sessions').delete().eq('user_id', userId);
+  if (error) throw new Error(error.message);
+}
+
 // ===== USERS =====
 
 const mapUser = (dbUser: any) => ({

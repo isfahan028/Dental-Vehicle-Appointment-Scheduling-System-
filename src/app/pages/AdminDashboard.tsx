@@ -600,6 +600,8 @@ export default function AdminDashboard() {
                     <Button
                       size="sm"
                       variant="outline"
+                      disabled={u.is_active && u.id === user?.id}
+                      title={u.is_active && u.id === user?.id ? "You can't deactivate your own account" : undefined}
                       onClick={() => toggleUserStatus(u.id)}
                       className={u.is_active ? 'text-red-600 border-red-200 hover:bg-red-50' : 'text-green-600 border-green-200 hover:bg-green-50'}
                     >

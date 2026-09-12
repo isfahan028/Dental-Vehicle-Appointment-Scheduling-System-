@@ -51,6 +51,15 @@ async function verifyAuth(c: any) {
     return { userId: null, error: 'Session expired' };
   }
 
+  // A deactivated account's sessions stop working immediately — not just
+  // future logins — so re-check is_active on every request, not only signin.
+  const profile = await db.getUser(session.user_id);
+  if (!profile || !profile.is_active) {
+    console.log('AUTH: Account is deactivated:', session.user_id);
+    await db.deleteSession(token);
+    return { userId: null, error: 'This account has been deactivated' };
+  }
+
   console.log('AUTH: User verified:', session.user_id);
   return { userId: session.user_id, error: null };
 }
@@ -131,6 +140,11 @@ app.post('/make-server-e95806c6/auth/signin', async (c) => {
 
     if (!userProfile) {
       return c.json({ error: 'User profile not found' }, 404);
+    }
+
+    if (!userProfile.is_active) {
+      console.log(`Sign in blocked - account deactivated: ${data.user.id}`);
+      return c.json({ error: 'This account has been deactivated. Contact an administrator.' }, 403);
     }
 
     // Generate our own simple token
@@ -656,7 +670,19 @@ app.put('/make-server-e95806c6/admin/users/:id', async (c) => {
       }
     }
 
+    // Same idea for deactivating yourself: don't let an admin cut off their
+    // own access mid-session.
+    if (updates.is_active === false && id === userId) {
+      return c.json({ error: "You can't deactivate your own account." }, 403);
+    }
+
     const updatedUser = await db.updateUser(id, updates);
+
+    // Deactivation takes effect immediately, not just for future logins:
+    // kill every existing session for this user right now.
+    if (updates.is_active === false) {
+      await db.deleteSessionsByUser(id);
+    }
 
     return c.json({ user: updatedUser, message: 'User updated successfully' });
   } catch (error) {
