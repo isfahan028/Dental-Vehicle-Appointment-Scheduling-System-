@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
-import type { Appointment, AppointmentStatus, DentalVehicle, Service, User as UserType } from '../types';
+import type { Appointment, AppointmentStatus, DentalVehicle, Role, Service, User as UserType } from '../types';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { VehicleFormModal } from '../components/admin/VehicleFormModal';
@@ -26,7 +26,9 @@ export default function AdminDashboard() {
   const [deletingVehicle, setDeletingVehicle] = useState<DentalVehicle | null>(null);
   const [serviceForm, setServiceForm] = useState<{ service: Service | null } | null>(null);
   const [deletingService, setDeletingService] = useState<Service | null>(null);
+  const [roleChange, setRoleChange] = useState<{ user: UserType; nextRole: Role } | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [roleBusy, setRoleBusy] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -208,11 +210,31 @@ export default function AdminDashboard() {
     }
   };
 
+  const confirmRoleChange = async () => {
+    if (!accessToken || !roleChange) return;
+
+    setRoleBusy(true);
+    try {
+      const res = await api.updateUser(roleChange.user.id, { role: roleChange.nextRole }, accessToken);
+      setUsers(prev => prev.map(u => (u.id === roleChange.user.id ? (res.user as UserType) : u)));
+      toast.success(
+        `${roleChange.user.name} is now ${roleChange.nextRole === 'admin' ? 'an admin' : 'a patient'}`,
+      );
+    } catch (error) {
+      // e.g. 403 from the self-demotion / last-admin guardrails
+      toast.error(error instanceof Error ? error.message : 'Failed to update role');
+    } finally {
+      setRoleBusy(false);
+      setRoleChange(null);
+    }
+  };
+
   // Stats Calculation
   const totalAppointments = appointments.length;
   const pendingAppointments = appointments.filter(a => a.status === 'Pending').length;
   const activeVehicles = vehicles.filter(v => v.is_available).length;
   const totalUsers = users.length;
+  const adminCount = users.filter(u => u.role === 'admin').length;
 
   return (
     <div className="space-y-8">
@@ -549,10 +571,35 @@ export default function AdminDashboard() {
                       {u.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                    {u.role === 'normal_user' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setRoleChange({ user: u, nextRole: 'admin' })}
+                      >
+                        Promote to Admin
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={u.id === user?.id || adminCount <= 1}
+                        title={
+                          u.id === user?.id
+                            ? "You can't change your own role"
+                            : adminCount <= 1
+                              ? 'Cannot remove the last admin'
+                              : undefined
+                        }
+                        onClick={() => setRoleChange({ user: u, nextRole: 'normal_user' })}
+                      >
+                        Demote to Patient
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => toggleUserStatus(u.id)}
                       className={u.is_active ? 'text-red-600 border-red-200 hover:bg-red-50' : 'text-green-600 border-green-200 hover:bg-green-50'}
                     >
@@ -605,6 +652,22 @@ export default function AdminDashboard() {
           busy={deleteBusy}
           onConfirm={confirmDeleteService}
           onCancel={() => setDeletingService(null)}
+        />
+      )}
+
+      {roleChange && (
+        <ConfirmDialog
+          danger={roleChange.nextRole !== 'admin'}
+          title={roleChange.nextRole === 'admin' ? 'Promote to admin?' : 'Demote to patient?'}
+          message={
+            roleChange.nextRole === 'admin'
+              ? `"${roleChange.user.name}" will get full admin access to this dashboard.`
+              : `"${roleChange.user.name}" will lose admin access and become a regular patient.`
+          }
+          confirmLabel={roleChange.nextRole === 'admin' ? 'Promote' : 'Demote'}
+          busy={roleBusy}
+          onConfirm={confirmRoleChange}
+          onCancel={() => setRoleChange(null)}
         />
       )}
     </div>

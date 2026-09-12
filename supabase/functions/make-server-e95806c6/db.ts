@@ -68,6 +68,17 @@ export async function getAllUsers() {
   return data ? data.map(mapUser) : [];
 }
 
+// Used to refuse demoting the last remaining admin.
+export async function countAdmins() {
+  const supabase = client();
+  const { count, error } = await supabase
+    .from('users')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('role', 'admin');
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function updateUser(id: string, updates: any) {
   const supabase = client();
   const dbUpdates: any = {};

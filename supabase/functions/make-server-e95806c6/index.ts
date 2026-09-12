@@ -643,8 +643,21 @@ app.put('/make-server-e95806c6/admin/users/:id', async (c) => {
       return c.json({ error: 'User not found' }, 404);
     }
 
+    // Demoting someone away from admin needs guardrails: never let the
+    // acting admin lock themselves out mid-session, and never leave the
+    // system with zero admins able to manage it.
+    if (updates.role !== undefined && updates.role !== 'admin' && targetUser.role === 'admin') {
+      if (id === userId) {
+        return c.json({ error: "You can't change your own role." }, 403);
+      }
+      const adminCount = await db.countAdmins();
+      if (adminCount <= 1) {
+        return c.json({ error: 'Cannot remove the last admin.' }, 403);
+      }
+    }
+
     const updatedUser = await db.updateUser(id, updates);
-    
+
     return c.json({ user: updatedUser, message: 'User updated successfully' });
   } catch (error) {
     console.error(`Error updating user: ${error}`);
