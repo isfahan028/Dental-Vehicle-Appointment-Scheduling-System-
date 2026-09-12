@@ -37,18 +37,25 @@ export default function RecurringRequestPage() {
 
   const loadAll = useCallback(async () => {
     if (!accessToken) return;
+
+    // Independent try/catches: a failure loading past requests shouldn't
+    // also blank out the vehicle/service dropdowns the form needs, and
+    // vice versa.
     try {
-      const [v, s, r] = await Promise.all([
-        api.getVehicles(),
-        api.getServices(),
-        api.getRecurringRequests(accessToken),
-      ]);
+      const [v, s] = await Promise.all([api.getVehicles(), api.getServices()]);
       setVehicles(v.filter((x) => x.is_available));
       setServices(s);
+    } catch (error) {
+      console.error('Failed to load vehicles/services:', error);
+      toast.error('Failed to load vehicles/services for the form');
+    }
+
+    try {
+      const r = await api.getRecurringRequests(accessToken);
       setRequests(r.sort((a, b) => b.created_at.localeCompare(a.created_at)));
     } catch (error) {
       console.error('Failed to load recurring requests:', error);
-      toast.error('Failed to load this page');
+      toast.error('Failed to load your past requests');
     } finally {
       setLoading(false);
     }

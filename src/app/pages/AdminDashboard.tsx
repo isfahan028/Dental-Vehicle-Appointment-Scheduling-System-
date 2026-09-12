@@ -44,25 +44,35 @@ export default function AdminDashboard() {
 
   const loadAll = useCallback(async () => {
     if (!accessToken) return;
-    try {
-      const [appointmentsData, vehiclesData, servicesData, requestsData, usersData] = await Promise.all([
-        api.getAppointments(accessToken),
-        api.getVehicles(),
-        api.getServices(),
-        api.getRecurringRequests(accessToken),
-        api.getAllUsers(accessToken),
-      ]);
-      setAppointments(appointmentsData);
-      setVehicles(vehiclesData);
-      setServices(servicesData);
-      setRecurringRequests(requestsData);
-      setUsers(usersData);
-    } catch (error) {
-      console.error('Failed to load admin data:', error);
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setIsLoading(false);
+
+    // allSettled, not all: one tab's data failing to load (e.g. a bad embed
+    // query) shouldn't blank out every other tab too.
+    const [appointmentsRes, vehiclesRes, servicesRes, requestsRes, usersRes] = await Promise.allSettled([
+      api.getAppointments(accessToken),
+      api.getVehicles(),
+      api.getServices(),
+      api.getRecurringRequests(accessToken),
+      api.getAllUsers(accessToken),
+    ]);
+
+    if (appointmentsRes.status === 'fulfilled') setAppointments(appointmentsRes.value);
+    if (vehiclesRes.status === 'fulfilled') setVehicles(vehiclesRes.value);
+    if (servicesRes.status === 'fulfilled') setServices(servicesRes.value);
+    if (requestsRes.status === 'fulfilled') setRecurringRequests(requestsRes.value);
+    if (usersRes.status === 'fulfilled') setUsers(usersRes.value);
+
+    const failed = [appointmentsRes, vehiclesRes, servicesRes, requestsRes, usersRes]
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed.length > 0) {
+      failed.forEach(r => console.error('Failed to load admin data:', r.reason));
+      toast.error(
+        failed.length === 5
+          ? 'Failed to load dashboard data'
+          : `Some dashboard data failed to load (${failed.length} of 5)`,
+      );
     }
+
+    setIsLoading(false);
   }, [accessToken]);
 
   const refetchAppointments = useCallback(async () => {

@@ -396,11 +396,17 @@ const mapRecurringRequest = (row: any) => {
   return extended;
 };
 
+// `recurring_requests` has TWO foreign keys into `users` (user_id and
+// reviewed_by), so the plain `users(name)` embed PostgREST uses elsewhere
+// (e.g. for appointments, which only has one FK to users) is ambiguous here
+// and errors with "more than one relationship was found for
+// 'recurring_requests' and 'users'". `!user_id` pins the embed to that
+// specific column.
 const RECURRING_REQUEST_SELECT = `
   *,
   dental_vehicles(vehicle_name),
   services(service_name),
-  users(name)
+  users!user_id(name)
 `;
 
 export async function createRecurringRequest(req: any) {
