@@ -370,3 +370,91 @@ export async function hasAppointmentConflict(vehicleId: string, date: string, ti
   if (error) throw new Error(error.message);
   return !!data;
 }
+
+// ===== RECURRING APPOINTMENT REQUESTS =====
+
+const mapRecurringRequest = (row: any) => {
+  const base = {
+    id: row.request_id.toString(),
+    user_id: row.user_id,
+    vehicle_id: row.vehicle_id.toString(),
+    service_id: row.service_id.toString(),
+    start_date: row.start_date,
+    time: row.appointment_time,
+    months_requested: row.months_requested,
+    status: row.status,
+    admin_note: row.admin_note,
+    reviewed_at: row.reviewed_at,
+    created_at: row.created_at,
+  };
+
+  const extended: any = { ...base };
+  if (row.dental_vehicles) extended.vehicle_name = row.dental_vehicles.vehicle_name;
+  if (row.services) extended.service_name = row.services.service_name;
+  if (row.users) extended.user_name = row.users.name;
+
+  return extended;
+};
+
+const RECURRING_REQUEST_SELECT = `
+  *,
+  dental_vehicles(vehicle_name),
+  services(service_name),
+  users(name)
+`;
+
+export async function createRecurringRequest(req: any) {
+  const supabase = client();
+  const { data, error } = await supabase.from('recurring_requests').insert({
+    user_id: req.user_id,
+    vehicle_id: parseInt(req.vehicle_id),
+    service_id: parseInt(req.service_id),
+    start_date: req.start_date,
+    appointment_time: req.time,
+    months_requested: req.months_requested,
+    status: 'Pending',
+  }).select(RECURRING_REQUEST_SELECT).maybeSingle();
+  if (error) throw new Error(`createRecurringRequest failed: ${error.message}`);
+  if (!data) throw new Error('createRecurringRequest: insert succeeded but no data returned (check RLS policies)');
+  return mapRecurringRequest(data);
+}
+
+export async function getAllRecurringRequests() {
+  const supabase = client();
+  const { data, error } = await supabase.from('recurring_requests').select(RECURRING_REQUEST_SELECT);
+  if (error) throw new Error(error.message);
+  return data ? data.map(mapRecurringRequest) : [];
+}
+
+export async function getRecurringRequestsByUser(userId: string) {
+  const supabase = client();
+  const { data, error } = await supabase.from('recurring_requests').select(RECURRING_REQUEST_SELECT).eq('user_id', userId);
+  if (error) throw new Error(error.message);
+  return data ? data.map(mapRecurringRequest) : [];
+}
+
+export async function getRecurringRequest(id: string) {
+  const supabase = client();
+  const { data, error } = await supabase.from('recurring_requests').select('*').eq('request_id', parseInt(id)).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapRecurringRequest(data) : null;
+}
+
+export async function updateRecurringRequestStatus(id: string, updates: any) {
+  const supabase = client();
+  const dbUpdates: any = {};
+  if (updates.status !== undefined) dbUpdates.status = updates.status;
+  if (updates.admin_note !== undefined) dbUpdates.admin_note = updates.admin_note;
+  if (updates.reviewed_by !== undefined) dbUpdates.reviewed_by = updates.reviewed_by;
+  if (updates.reviewed_at !== undefined) dbUpdates.reviewed_at = updates.reviewed_at;
+
+  const { data, error } = await supabase.from('recurring_requests').update(dbUpdates).eq('request_id', parseInt(id)).select(RECURRING_REQUEST_SELECT).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapRecurringRequest(data) : null;
+}
+
+export async function deleteRecurringRequest(id: string) {
+  const supabase = client();
+  const { error } = await supabase.from('recurring_requests').delete().eq('request_id', parseInt(id));
+  if (error) throw new Error(error.message);
+}

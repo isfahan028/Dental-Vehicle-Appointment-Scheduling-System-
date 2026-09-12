@@ -46,3 +46,30 @@ export type Appointment = {
   service_name?: string;
   user_name?: string;
 };
+
+export type RecurringRequestStatus = 'Pending' | 'Approved' | 'Rejected';
+
+export type RecurringRequest = {
+  id: string;
+  user_id: string;
+  vehicle_id: string;
+  service_id: string;
+  start_date: string; // ISO date string YYYY-MM-DD — first occurrence
+  time: string; // HH:mm
+  months_requested: number;
+  status: RecurringRequestStatus;
+  admin_note?: string | null;
+  created_at: string;
+  reviewed_at?: string | null;
+  // Joined fields for UI convenience
+  vehicle_name?: string;
+  service_name?: string;
+  user_name?: string;
+};
+
+// Returned by the edge function when a request is approved.
+export type RecurringRequestResult = {
+  request: RecurringRequest;
+  createdCount: number;
+  skippedDates: string[];
+};

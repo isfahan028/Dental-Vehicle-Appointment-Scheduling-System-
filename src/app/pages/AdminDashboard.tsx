@@ -2,12 +2,12 @@ import { useCallback, useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
-import type { Appointment, AppointmentStatus, DentalVehicle, Role, Service, User as UserType } from '../types';
+import type { Appointment, AppointmentStatus, DentalVehicle, RecurringRequest, Role, Service, User as UserType } from '../types';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { VehicleFormModal } from '../components/admin/VehicleFormModal';
 import { ServiceFormModal } from '../components/admin/ServiceFormModal';
-import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil, Repeat } from 'lucide-react';
 
 const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
 type AppointmentFilter = (typeof APPOINTMENT_FILTERS)[number];
@@ -17,7 +17,7 @@ import { usePolling } from '../hooks/usePolling';
 
 export default function AdminDashboard() {
   const { user, isAdmin, accessToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<'appointments' | 'vehicles' | 'services' | 'users'>('appointments');
+  const [activeTab, setActiveTab] = useState<'appointments' | 'vehicles' | 'services' | 'requests' | 'users'>('appointments');
   const [apptFilter, setApptFilter] = useState<AppointmentFilter>('All');
   const [apptSearch, setApptSearch] = useState('');
   const [editingPrice, setEditingPrice] = useState<{ id: string; value: string } | null>(null);
@@ -28,12 +28,15 @@ export default function AdminDashboard() {
   const [deletingService, setDeletingService] = useState<Service | null>(null);
   const [roleChange, setRoleChange] = useState<{ user: UserType; nextRole: Role } | null>(null);
   const [deactivatingUser, setDeactivatingUser] = useState<UserType | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{ request: RecurringRequest; action: 'Approved' | 'Rejected' } | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [roleBusy, setRoleBusy] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [recurringRequests, setRecurringRequests] = useState<RecurringRequest[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -42,15 +45,17 @@ export default function AdminDashboard() {
   const loadAll = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const [appointmentsData, vehiclesData, servicesData, usersData] = await Promise.all([
+      const [appointmentsData, vehiclesData, servicesData, requestsData, usersData] = await Promise.all([
         api.getAppointments(accessToken),
         api.getVehicles(),
         api.getServices(),
+        api.getRecurringRequests(accessToken),
         api.getAllUsers(accessToken),
       ]);
       setAppointments(appointmentsData);
       setVehicles(vehiclesData);
       setServices(servicesData);
+      setRecurringRequests(requestsData);
       setUsers(usersData);
     } catch (error) {
       console.error('Failed to load admin data:', error);
@@ -239,12 +244,46 @@ export default function AdminDashboard() {
     }
   };
 
+  const confirmReview = async () => {
+    if (!accessToken || !reviewTarget) return;
+
+    setReviewBusy(true);
+    try {
+      const result = await api.reviewRecurringRequest(
+        reviewTarget.request.id,
+        { status: reviewTarget.action },
+        accessToken,
+      );
+      setRecurringRequests(prev =>
+        prev.map(r => (r.id === reviewTarget.request.id ? result.request : r)),
+      );
+
+      if (reviewTarget.action === 'Approved') {
+        toast.success(
+          result.skippedDates.length > 0
+            ? `Booked ${result.createdCount} of ${reviewTarget.request.months_requested} month(s). Skipped: ${result.skippedDates.join(', ')} (already booked).`
+            : `Booked all ${result.createdCount} month(s).`,
+        );
+        // New appointments were created behind the scenes — refresh the list.
+        refetchAppointments();
+      } else {
+        toast.success('Request rejected');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to review request');
+    } finally {
+      setReviewBusy(false);
+      setReviewTarget(null);
+    }
+  };
+
   // Stats Calculation
   const totalAppointments = appointments.length;
   const pendingAppointments = appointments.filter(a => a.status === 'Pending').length;
   const activeVehicles = vehicles.filter(v => v.is_available).length;
   const totalUsers = users.length;
   const adminCount = users.filter(u => u.role === 'admin').length;
+  const pendingRequestCount = recurringRequests.filter(r => r.status === 'Pending').length;
 
   return (
     <div className="space-y-8">
@@ -253,18 +292,23 @@ export default function AdminDashboard() {
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
           <p className="text-gray-500">Manage your dental fleet and appointments.</p>
         </div>
-        <div className="flex bg-gray-100 p-1 rounded-lg">
-          {(['appointments', 'vehicles', 'services', 'users'] as const).map((tab) => (
+        <div className="flex bg-gray-100 p-1 rounded-lg flex-wrap">
+          {(['appointments', 'vehicles', 'services', 'requests', 'users'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-all capitalize ${
-                activeTab === tab 
-                  ? 'bg-white text-blue-600 shadow-sm' 
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all capitalize flex items-center gap-1.5 ${
+                activeTab === tab
+                  ? 'bg-white text-blue-600 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               {tab}
+              {tab === 'requests' && pendingRequestCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-yellow-400 text-yellow-900 text-xs font-bold">
+                  {pendingRequestCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -557,6 +601,86 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {activeTab === 'requests' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Repeat size={20} className="text-blue-600" />
+            <h3 className="font-bold text-gray-900">Recurring Appointment Requests</h3>
+          </div>
+
+          {recurringRequests.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center text-gray-400">
+              No recurring requests yet.
+            </div>
+          ) : (
+            [...recurringRequests]
+              .sort((a, b) => {
+                if (a.status === 'Pending' && b.status !== 'Pending') return -1;
+                if (a.status !== 'Pending' && b.status === 'Pending') return 1;
+                return b.created_at.localeCompare(a.created_at);
+              })
+              .map((r) => (
+                <div
+                  key={r.id}
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-gray-900">{r.user_name || 'Unknown'}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          r.status === 'Pending'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : r.status === 'Approved'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {r.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      {r.service_name} · {r.vehicle_name}
+                    </p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <Calendar size={14} /> starts {r.start_date}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock size={14} /> {r.time}
+                      </span>
+                      <span>{r.months_requested} month(s)</span>
+                    </div>
+                    {r.admin_note && (
+                      <p className="text-sm text-gray-500 italic">&quot;{r.admin_note}&quot;</p>
+                    )}
+                  </div>
+
+                  {r.status === 'Pending' && (
+                    <div className="flex gap-2 self-start md:self-center">
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => setReviewTarget({ request: r, action: 'Approved' })}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => setReviewTarget({ request: r, action: 'Rejected' })}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))
+          )}
+        </div>
+      )}
+
       {activeTab === 'users' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
@@ -692,6 +816,22 @@ export default function AdminDashboard() {
           busy={statusBusy}
           onConfirm={confirmDeactivateUser}
           onCancel={() => setDeactivatingUser(null)}
+        />
+      )}
+
+      {reviewTarget && (
+        <ConfirmDialog
+          danger={reviewTarget.action === 'Rejected'}
+          title={reviewTarget.action === 'Approved' ? 'Approve this request?' : 'Reject this request?'}
+          message={
+            reviewTarget.action === 'Approved'
+              ? `Books ${reviewTarget.request.months_requested} month(s) of "${reviewTarget.request.service_name}" for ${reviewTarget.request.user_name}, starting ${reviewTarget.request.start_date}. Any month whose slot is already taken will be skipped.`
+              : `"${reviewTarget.request.user_name}"'s request will be marked rejected. No appointments will be created.`
+          }
+          confirmLabel={reviewTarget.action === 'Approved' ? 'Approve' : 'Reject'}
+          busy={reviewBusy}
+          onConfirm={confirmReview}
+          onCancel={() => setReviewTarget(null)}
         />
       )}
     </div>

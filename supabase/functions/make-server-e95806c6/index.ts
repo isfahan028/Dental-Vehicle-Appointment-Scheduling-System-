@@ -611,6 +611,215 @@ app.delete('/make-server-e95806c6/appointments/:id', async (c) => {
   }
 });
 
+// ===== RECURRING APPOINTMENT REQUESTS =====
+
+// Add `n` months to an ISO date string, clamping the day to the last day of
+// the target month (e.g. Jan 31 + 1 month -> Feb 28/29). Plain date math so
+// this needs no external date library.
+function addMonthsClamped(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const targetIndex = m - 1 + n; // 0-based, can run past 11 or below 0
+  const targetYear = y + Math.floor(targetIndex / 12);
+  const targetMonth = ((targetIndex % 12) + 12) % 12; // 0-11
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const day = Math.min(d, daysInTargetMonth);
+  return `${String(targetYear).padStart(4, '0')}-${String(targetMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+// Submit a recurring-appointment request (any authenticated user, for
+// themselves). Stays Pending until an admin reviews it — no appointments
+// are created yet.
+app.post('/make-server-e95806c6/recurring-requests', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  try {
+    const { vehicle_id, service_id, start_date, time, months_requested } = await c.req.json();
+
+    if (!vehicle_id || !service_id || !start_date || !time || !months_requested) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+
+    const months = Number(months_requested);
+    if (!Number.isInteger(months) || months < 1 || months > 24) {
+      return c.json({ error: 'months_requested must be a whole number between 1 and 24' }, 400);
+    }
+
+    const vehicle = await db.getVehicle(vehicle_id);
+    if (!vehicle) return c.json({ error: 'Vehicle not found' }, 404);
+
+    const service = await db.getService(service_id);
+    if (!service) return c.json({ error: 'Service not found' }, 404);
+
+    const request = await db.createRecurringRequest({
+      user_id: userId,
+      vehicle_id,
+      service_id,
+      start_date,
+      time,
+      months_requested: months,
+    });
+
+    return c.json({ request, message: 'Recurring request submitted' });
+  } catch (error) {
+    console.error(`Error creating recurring request: ${error}`);
+    return c.json({ error: `Failed to create recurring request: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
+// List requests: admins see everyone's, everyone else sees only their own.
+app.get('/make-server-e95806c6/recurring-requests', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  try {
+    const userProfile = await db.getUser(userId);
+    const requests = userProfile?.role === 'admin'
+      ? await db.getAllRecurringRequests()
+      : await db.getRecurringRequestsByUser(userId);
+
+    return c.json({ requests });
+  } catch (error) {
+    console.error(`Error fetching recurring requests: ${error}`);
+    return c.json({ error: `Failed to fetch recurring requests: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
+// Approve or reject a request (admin only, standing in for the dentist's
+// sign-off). Approving generates the actual appointments, one per month,
+// already Approved — skipping any month whose slot is already taken (the
+// rest of the series still gets booked).
+app.put('/make-server-e95806c6/recurring-requests/:id', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  const userProfile = await db.getUser(userId);
+  if (!userProfile || userProfile.role !== 'admin') {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+
+  try {
+    const id = c.req.param('id');
+    const { status, admin_note } = await c.req.json();
+
+    if (status !== 'Approved' && status !== 'Rejected') {
+      return c.json({ error: "status must be 'Approved' or 'Rejected'" }, 400);
+    }
+
+    const existing = await db.getRecurringRequest(id);
+    if (!existing) return c.json({ error: 'Request not found' }, 404);
+    if (existing.status !== 'Pending') {
+      return c.json({ error: `Request has already been ${existing.status.toLowerCase()}` }, 409);
+    }
+
+    if (status === 'Rejected') {
+      const request = await db.updateRecurringRequestStatus(id, {
+        status: 'Rejected',
+        admin_note: admin_note ?? null,
+        reviewed_by: userId,
+        reviewed_at: new Date().toISOString(),
+      });
+      return c.json({ request, createdCount: 0, skippedDates: [], message: 'Request rejected' });
+    }
+
+    // Approved: generate one appointment per month.
+    const service = await db.getService(existing.service_id);
+    if (!service) return c.json({ error: 'Service no longer exists' }, 404);
+
+    const createdDates: string[] = [];
+    const skippedDates: string[] = [];
+
+    for (let i = 0; i < existing.months_requested; i++) {
+      const date = addMonthsClamped(existing.start_date, i);
+      const conflict = await db.hasAppointmentConflict(existing.vehicle_id, date, existing.time);
+      if (conflict) {
+        skippedDates.push(date);
+        continue;
+      }
+      try {
+        await db.createAppointment({
+          user_id: existing.user_id,
+          vehicle_id: existing.vehicle_id,
+          service_id: existing.service_id,
+          date,
+          time: existing.time,
+          status: 'Approved',
+          price: service.price ?? null,
+        });
+        createdDates.push(date);
+      } catch (err) {
+        // Lost a last-moment race on this one month's slot — same
+        // no-duplicate-booking guarantee a normal booking gets.
+        if (err instanceof db.SlotConflictError) {
+          skippedDates.push(date);
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const note = admin_note ??
+      `Booked ${createdDates.length} of ${existing.months_requested} month(s).` +
+      (skippedDates.length ? ` Skipped: ${skippedDates.join(', ')} (slot already booked).` : '');
+
+    const request = await db.updateRecurringRequestStatus(id, {
+      status: 'Approved',
+      admin_note: note,
+      reviewed_by: userId,
+      reviewed_at: new Date().toISOString(),
+    });
+
+    return c.json({
+      request,
+      createdCount: createdDates.length,
+      skippedDates,
+      message: 'Request approved',
+    });
+  } catch (error) {
+    console.error(`Error reviewing recurring request: ${error}`);
+    return c.json({ error: `Failed to review recurring request: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
+// Withdraw/remove a request — the owner may withdraw their own while it's
+// still Pending; an admin may remove any of them at any time.
+app.delete('/make-server-e95806c6/recurring-requests/:id', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  try {
+    const id = c.req.param('id');
+    const existing = await db.getRecurringRequest(id);
+    if (!existing) return c.json({ error: 'Request not found' }, 404);
+
+    const userProfile = await db.getUser(userId);
+    const isAdmin = userProfile?.role === 'admin';
+
+    if (!isAdmin) {
+      if (existing.user_id !== userId) {
+        return c.json({ error: 'Not authorized to remove this request' }, 403);
+      }
+      if (existing.status !== 'Pending') {
+        return c.json({ error: 'Only a pending request can be withdrawn' }, 403);
+      }
+    }
+
+    await db.deleteRecurringRequest(id);
+    return c.json({ message: 'Request removed' });
+  } catch (error) {
+    console.error(`Error deleting recurring request: ${error}`);
+    return c.json({ error: `Failed to delete recurring request: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
 // ===== ADMIN ROUTES =====
 
 // Get all users (admin only)

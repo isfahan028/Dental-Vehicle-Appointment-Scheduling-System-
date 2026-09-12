@@ -47,6 +47,14 @@ function Navbar() {
               >
                 Book Now
               </NavLink>
+              <NavLink
+                to="/recurring"
+                className={({ isActive }) =>
+                  isActive ? "font-bold underline" : "hover:text-blue-100"
+                }
+              >
+                Recurring
+              </NavLink>
             </>
           )}
           {isAdmin && (

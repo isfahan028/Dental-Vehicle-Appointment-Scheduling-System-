@@ -8,6 +8,7 @@ import Booking from "./pages/Booking";
 import Appointments from "./pages/Appointments";
 import AdminDashboard from "./pages/AdminDashboard";
 import AvailabilityCalendar from "./pages/AvailabilityCalendar";
+import RecurringRequestPage from "./pages/RecurringRequest";
 
 export const router = createBrowserRouter([
   {
@@ -27,6 +28,14 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "appointments", Component: Appointments },
+      {
+        path: "recurring",
+        element: (
+          <RequireAuth>
+            <RecurringRequestPage />
+          </RequireAuth>
+        ),
+      },
       {
         path: "admin",
         element: (

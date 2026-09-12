@@ -1,5 +1,5 @@
 import { projectId, publicAnonKey } from "../utils/supabase/info";
-import type { User, DentalVehicle, Service, Appointment, AppointmentStatus } from '../types';
+import type { User, DentalVehicle, Service, Appointment, AppointmentStatus, RecurringRequest, RecurringRequestResult } from '../types';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-e95806c6`;
 
@@ -321,6 +321,85 @@ export async function deleteAppointment(id: string, accessToken: string) {
 
   if (!response.ok) {
     throw new Error(data.error || 'Failed to delete appointment');
+  }
+
+  return data;
+}
+
+// ===== RECURRING APPOINTMENT REQUESTS API =====
+
+export async function createRecurringRequest(
+  data: {
+    vehicle_id: string;
+    service_id: string;
+    start_date: string;
+    time: string;
+    months_requested: number;
+  },
+  accessToken: string
+) {
+  const response = await fetch(`${API_BASE_URL}/recurring-requests`, {
+    method: 'POST',
+    headers: getAuthHeaders(accessToken),
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Failed to submit recurring request');
+  }
+
+  return result as { request: RecurringRequest; message: string };
+}
+
+export async function getRecurringRequests(accessToken: string): Promise<RecurringRequest[]> {
+  const response = await fetch(`${API_BASE_URL}/recurring-requests`, {
+    headers: getAuthHeaders(accessToken),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to fetch recurring requests');
+  }
+
+  return data.requests;
+}
+
+// Admin only: approve or reject a request. Approving generates the actual
+// appointments — the result says how many months were booked and which, if
+// any, were skipped because that slot was already taken.
+export async function reviewRecurringRequest(
+  id: string,
+  review: { status: 'Approved' | 'Rejected'; admin_note?: string },
+  accessToken: string
+): Promise<RecurringRequestResult> {
+  const response = await fetch(`${API_BASE_URL}/recurring-requests/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(accessToken),
+    body: JSON.stringify(review),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to review recurring request');
+  }
+
+  return data;
+}
+
+export async function deleteRecurringRequest(id: string, accessToken: string) {
+  const response = await fetch(`${API_BASE_URL}/recurring-requests/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(accessToken),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to remove recurring request');
   }
 
   return data;
