@@ -400,13 +400,15 @@ const mapRecurringRequest = (row: any) => {
 // reviewed_by), so the plain `users(name)` embed PostgREST uses elsewhere
 // (e.g. for appointments, which only has one FK to users) is ambiguous here
 // and errors with "more than one relationship was found for
-// 'recurring_requests' and 'users'". `!user_id` pins the embed to that
-// specific column.
+// 'recurring_requests' and 'users'". A bare column-name hint (`!user_id`)
+// isn't accepted — this Supabase project's PostgREST wants the actual FK
+// constraint name (confirmed via `pg_constraint`:
+// recurring_requests_user_id_fkey / recurring_requests_reviewed_by_fkey).
 const RECURRING_REQUEST_SELECT = `
   *,
   dental_vehicles(vehicle_name),
   services(service_name),
-  users!user_id(name)
+  users!recurring_requests_user_id_fkey(name)
 `;
 
 export async function createRecurringRequest(req: any) {
