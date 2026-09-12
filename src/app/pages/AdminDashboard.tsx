@@ -27,8 +27,10 @@ export default function AdminDashboard() {
   const [serviceForm, setServiceForm] = useState<{ service: Service | null } | null>(null);
   const [deletingService, setDeletingService] = useState<Service | null>(null);
   const [roleChange, setRoleChange] = useState<{ user: UserType; nextRole: Role } | null>(null);
+  const [deactivatingUser, setDeactivatingUser] = useState<UserType | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [roleBusy, setRoleBusy] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -191,22 +193,30 @@ export default function AdminDashboard() {
     }
   };
 
-  const toggleUserStatus = async (id: string) => {
+  const setUserActive = async (id: string, isActive: boolean) => {
     if (!accessToken) return;
 
     try {
-      const targetUser = users.find(u => u.id === id);
-      if (!targetUser) return;
-
-      await api.updateUser(id, { is_active: !targetUser.is_active }, accessToken);
-      
-      setUsers(prev => 
-        prev.map(u => u.id === id ? { ...u, is_active: !u.is_active } : u)
-      );
-      
-      toast.success('User status updated');
+      await api.updateUser(id, { is_active: isActive }, accessToken);
+      setUsers(prev => prev.map(u => (u.id === id ? { ...u, is_active: isActive } : u)));
+      toast.success(isActive ? 'User activated' : 'User deactivated');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update user');
+    }
+  };
+
+  // Activating is harmless and immediate. Deactivating locks someone out of
+  // their own account, so it goes through a confirmation first.
+  const activateUser = (id: string) => setUserActive(id, true);
+
+  const confirmDeactivateUser = async () => {
+    if (!deactivatingUser) return;
+    setStatusBusy(true);
+    try {
+      await setUserActive(deactivatingUser.id, false);
+    } finally {
+      setStatusBusy(false);
+      setDeactivatingUser(null);
     }
   };
 
@@ -602,7 +612,7 @@ export default function AdminDashboard() {
                       variant="outline"
                       disabled={u.is_active && u.id === user?.id}
                       title={u.is_active && u.id === user?.id ? "You can't deactivate your own account" : undefined}
-                      onClick={() => toggleUserStatus(u.id)}
+                      onClick={() => (u.is_active ? setDeactivatingUser(u) : activateUser(u.id))}
                       className={u.is_active ? 'text-red-600 border-red-200 hover:bg-red-50' : 'text-green-600 border-green-200 hover:bg-green-50'}
                     >
                       {u.is_active ? 'Deactivate' : 'Activate'}
@@ -670,6 +680,18 @@ export default function AdminDashboard() {
           busy={roleBusy}
           onConfirm={confirmRoleChange}
           onCancel={() => setRoleChange(null)}
+        />
+      )}
+
+      {deactivatingUser && (
+        <ConfirmDialog
+          danger
+          title="Deactivate this user?"
+          message={`"${deactivatingUser.name}" will be signed out everywhere and won't be able to log back in until reactivated.`}
+          confirmLabel="Deactivate"
+          busy={statusBusy}
+          onConfirm={confirmDeactivateUser}
+          onCancel={() => setDeactivatingUser(null)}
         />
       )}
     </div>
