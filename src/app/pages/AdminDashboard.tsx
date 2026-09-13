@@ -9,6 +9,7 @@ import { VehicleFormModal } from '../components/admin/VehicleFormModal';
 import { ServiceFormModal } from '../components/admin/ServiceFormModal';
 import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil, Repeat, ChevronLeft, ChevronRight } from 'lucide-react';
 import { buildMonthGrid, monthLabel, toDateKey } from '../lib/slots';
+import { withRetry } from '../lib/retry';
 
 const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
 type AppointmentFilter = (typeof APPOINTMENT_FILTERS)[number];
@@ -57,13 +58,17 @@ export default function AdminDashboard() {
     if (!accessToken) return;
 
     // allSettled, not all: one tab's data failing to load (e.g. a bad embed
-    // query) shouldn't blank out every other tab too.
+    // query) shouldn't blank out every other tab too. Each call also gets one
+    // retry — a cold-starting edge function or a dropped request can fail a
+    // handful of these together (usually the token-checking ones) for no
+    // real reason, and a short retry clears that up before it ever becomes
+    // a user-visible error.
     const [appointmentsRes, vehiclesRes, servicesRes, requestsRes, usersRes] = await Promise.allSettled([
-      api.getAppointments(accessToken),
-      api.getVehicles(),
-      api.getServices(),
-      api.getAllRecurringRequests(accessToken),
-      api.getAllUsers(accessToken),
+      withRetry(() => api.getAppointments(accessToken)),
+      withRetry(() => api.getVehicles()),
+      withRetry(() => api.getServices()),
+      withRetry(() => api.getAllRecurringRequests(accessToken)),
+      withRetry(() => api.getAllUsers(accessToken)),
     ]);
 
     if (appointmentsRes.status === 'fulfilled') setAppointments(appointmentsRes.value);
