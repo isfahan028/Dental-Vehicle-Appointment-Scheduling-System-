@@ -3,6 +3,14 @@ import { cors } from 'npm:hono/cors';
 import { logger } from 'npm:hono/logger';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import * as db from './db.ts';
+import {
+  sendEmail,
+  appointmentConfirmedEmail,
+  appointmentApprovedEmail,
+  appointmentCancelledEmail,
+  recurringApprovedEmail,
+  recurringRejectedEmail,
+} from './email.ts';
 
 const app = new Hono();
 
@@ -519,6 +527,20 @@ app.post('/make-server-e95806c6/appointments', async (c) => {
 
     console.log(`Appointment ${appointment.id} created successfully`);
 
+    // Best-effort confirmation email — never blocks the response.
+    const patient = await db.getUser(userId);
+    if (patient) {
+      const { subject, html } = appointmentConfirmedEmail({
+        patientName: patient.name,
+        serviceName: service.name,
+        vehicleName: vehicle.name,
+        date,
+        time,
+        price: appointment.price,
+      });
+      await sendEmail(patient.email, subject, html);
+    }
+
     return c.json({
       appointment,
       message: 'Appointment created successfully'
@@ -576,6 +598,31 @@ app.put('/make-server-e95806c6/appointments/:id', async (c) => {
     }
 
     const updatedAppointment = await db.updateAppointment(id, updates);
+
+    // Best-effort status-change email — only for the transitions patients
+    // actually care about, and always to the appointment's owner (not
+    // whoever made the change, which may be an admin).
+    if (status === 'Approved' || status === 'Cancelled') {
+      const [patient, vehicle, service] = await Promise.all([
+        db.getUser(appointment.user_id),
+        db.getVehicle(appointment.vehicle_id),
+        db.getService(appointment.service_id),
+      ]);
+      if (patient && vehicle && service) {
+        const info = {
+          patientName: patient.name,
+          serviceName: service.name,
+          vehicleName: vehicle.name,
+          date: appointment.date,
+          time: appointment.time,
+          price: updatedAppointment?.price,
+        };
+        const { subject, html } = status === 'Approved'
+          ? appointmentApprovedEmail(info)
+          : appointmentCancelledEmail(info);
+        await sendEmail(patient.email, subject, html);
+      }
+    }
 
     return c.json({
       appointment: updatedAppointment,
@@ -740,6 +787,17 @@ app.put('/make-server-e95806c6/recurring-requests/:id', async (c) => {
         reviewed_by: userId,
         reviewed_at: new Date().toISOString(),
       });
+
+      const requester = await db.getUser(existing.user_id);
+      if (requester) {
+        const { subject, html } = recurringRejectedEmail({
+          patientName: requester.name,
+          serviceName: existing.service_name ?? 'appointment',
+          adminNote: admin_note ?? null,
+        });
+        await sendEmail(requester.email, subject, html);
+      }
+
       return c.json({ request, createdCount: 0, skippedDates: [], message: 'Request rejected' });
     }
 
@@ -797,6 +855,21 @@ app.put('/make-server-e95806c6/recurring-requests/:id', async (c) => {
       reviewed_by: userId,
       reviewed_at: new Date().toISOString(),
     });
+
+    const requester = await db.getUser(existing.user_id);
+    if (requester) {
+      const { subject, html } = recurringApprovedEmail({
+        patientName: requester.name,
+        serviceName: existing.service_name ?? 'appointment',
+        vehicleName: existing.vehicle_name ?? 'unit',
+        time: existing.time,
+        monthsRequested: existing.months_requested,
+        createdCount: createdDates.length,
+        skippedDates,
+        monthlyPrice: priceToUse,
+      });
+      await sendEmail(requester.email, subject, html);
+    }
 
     return c.json({
       request,
