@@ -7,17 +7,19 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { VehicleFormModal } from '../components/admin/VehicleFormModal';
 import { ServiceFormModal } from '../components/admin/ServiceFormModal';
-import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil, Repeat } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil, Repeat, ChevronLeft, ChevronRight } from 'lucide-react';
+import { buildMonthGrid, monthLabel, toDateKey } from '../lib/slots';
 
 const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
 type AppointmentFilter = (typeof APPOINTMENT_FILTERS)[number];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 import { toast } from 'sonner';
 import { useRealtimeRefetch } from '../hooks/useRealtime';
 import { usePolling } from '../hooks/usePolling';
 
 export default function AdminDashboard() {
   const { user, isAdmin, accessToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<'appointments' | 'vehicles' | 'services' | 'requests' | 'users'>('appointments');
+  const [activeTab, setActiveTab] = useState<'appointments' | 'calendar' | 'vehicles' | 'services' | 'requests' | 'users'>('appointments');
   const [apptFilter, setApptFilter] = useState<AppointmentFilter>('All');
   const [apptSearch, setApptSearch] = useState('');
   const [editingPrice, setEditingPrice] = useState<{ id: string; value: string } | null>(null);
@@ -37,6 +39,11 @@ export default function AdminDashboard() {
   const [statusBusy, setStatusBusy] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [bulkPriceBusy, setBulkPriceBusy] = useState(false);
+  const now = useMemo(() => new Date(), []);
+  const [calYear, setCalYear] = useState(() => now.getFullYear());
+  const [calMonth, setCalMonth] = useState(() => now.getMonth());
+  const [calVehicleFilter, setCalVehicleFilter] = useState('all');
+  const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -112,6 +119,31 @@ export default function AdminDashboard() {
       })
       .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`));
   }, [appointments, apptFilter, apptSearch]);
+
+  // Appointments grouped by date ("YYYY-MM-DD"), for the Calendar tab —
+  // filtered by vehicle if one is picked, sorted by time within the day.
+  const calAppointmentsByDate = useMemo(() => {
+    const map = new Map<string, Appointment[]>();
+    for (const a of appointments) {
+      if (calVehicleFilter !== 'all' && a.vehicle_id !== calVehicleFilter) continue;
+      const list = map.get(a.date) ?? [];
+      list.push(a);
+      map.set(a.date, list);
+    }
+    for (const list of map.values()) list.sort((a, b) => a.time.localeCompare(b.time));
+    return map;
+  }, [appointments, calVehicleFilter]);
+
+  const calGrid = useMemo(() => buildMonthGrid(calYear, calMonth), [calYear, calMonth]);
+  const todayKey = toDateKey(now);
+  const calAtCurrentMonth = calYear === now.getFullYear() && calMonth === now.getMonth();
+
+  const shiftCalMonth = (delta: number) => {
+    const d = new Date(calYear, calMonth + delta, 1);
+    setCalYear(d.getFullYear());
+    setCalMonth(d.getMonth());
+    setSelectedCalDate(null);
+  };
 
   if (isLoading) {
     return (
@@ -351,7 +383,7 @@ export default function AdminDashboard() {
           <p className="text-gray-500">Manage your dental fleet and appointments.</p>
         </div>
         <div className="flex bg-gray-100 p-1 rounded-lg flex-wrap">
-          {(['appointments', 'vehicles', 'services', 'requests', 'users'] as const).map((tab) => (
+          {(['appointments', 'calendar', 'vehicles', 'services', 'requests', 'users'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -553,6 +585,179 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'calendar' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              Vehicle
+              <select
+                value={calVehicleFilter}
+                onChange={(e) => {
+                  setCalVehicleFilter(e.target.value);
+                  setSelectedCalDate(null);
+                }}
+                className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              >
+                <option value="all">All vehicles</option>
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => shiftCalMonth(-1)}
+                className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100"
+                aria-label="Previous month"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="min-w-[10rem] text-center font-semibold text-gray-800">
+                {monthLabel(calYear, calMonth)}
+              </span>
+              <button
+                onClick={() => shiftCalMonth(1)}
+                className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100"
+                aria-label="Next month"
+              >
+                <ChevronRight size={18} />
+              </button>
+              {!calAtCurrentMonth && (
+                <button
+                  onClick={() => { setCalYear(now.getFullYear()); setCalMonth(now.getMonth()); setSelectedCalDate(null); }}
+                  className="text-sm font-medium text-blue-600 hover:underline"
+                >
+                  Today
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-gray-600">
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-yellow-400" /> Pending</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-green-500" /> Approved</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Completed</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-gray-300" /> Cancelled</span>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-1">
+              {WEEKDAYS.map((d) => (
+                <div key={d} className="text-center text-xs font-semibold uppercase tracking-wider text-gray-400 py-2">
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
+              {calGrid.map((date) => {
+                const key = toDateKey(date);
+                const inMonth = date.getMonth() === calMonth;
+                const isToday = key === todayKey;
+                const isSelected = selectedCalDate === key;
+                const dayAppts = calAppointmentsByDate.get(key) ?? [];
+                const statusesPresent = new Set(dayAppts.map((a) => a.status));
+
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedCalDate(isSelected ? null : key)}
+                    className={[
+                      'relative flex flex-col rounded-xl p-2 min-h-[4.5rem] sm:min-h-[5rem] text-left transition-all',
+                      dayAppts.length > 0 ? 'bg-blue-50/60 hover:ring-2 hover:ring-blue-300' : 'bg-gray-50 hover:bg-gray-100',
+                      inMonth ? '' : 'opacity-40',
+                      isSelected ? 'ring-2 ring-blue-600' : '',
+                      isToday ? 'outline outline-2 outline-offset-1 outline-blue-400' : '',
+                    ].join(' ')}
+                  >
+                    <span className="text-sm font-bold text-gray-700">{date.getDate()}</span>
+                    {dayAppts.length > 0 && (
+                      <span className="mt-auto space-y-1">
+                        <span className="flex gap-1 flex-wrap">
+                          {statusesPresent.has('Pending') && <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />}
+                          {statusesPresent.has('Approved') && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
+                          {statusesPresent.has('Completed') && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                          {statusesPresent.has('Cancelled') && <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />}
+                        </span>
+                        <span className="block text-[11px] font-medium text-gray-600">
+                          {dayAppts.length} appt{dayAppts.length > 1 ? 's' : ''}
+                        </span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedCalDate && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+              <h3 className="text-lg font-bold text-gray-900">
+                {(() => {
+                  const [y, m, d] = selectedCalDate.split('-').map(Number);
+                  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+                    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+                  });
+                })()}
+              </h3>
+
+              {(calAppointmentsByDate.get(selectedCalDate) ?? []).length === 0 ? (
+                <p className="text-sm text-gray-400">No appointments on this day.</p>
+              ) : (
+                <div className="space-y-3">
+                  {(calAppointmentsByDate.get(selectedCalDate) ?? []).map((appt) => (
+                    <div
+                      key={appt.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-gray-100 p-4"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-gray-900">{appt.time}</span>
+                          <span className="text-gray-400">·</span>
+                          <span className="text-sm text-gray-700">{appt.user_name || 'Unknown'}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              appt.status === 'Approved' ? 'bg-green-100 text-green-800' :
+                              appt.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                              appt.status === 'Cancelled' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {appt.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          {appt.service_name} · {appt.vehicle_name}
+                          {appt.price != null && <> · ฿{appt.price}</>}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-center">
+                        {appt.status === 'Pending' && (
+                          <Button size="sm" onClick={() => handleStatusChange(appt.id, 'Approved')} className="bg-green-600 hover:bg-green-700 text-white">
+                            Approve
+                          </Button>
+                        )}
+                        {appt.status === 'Approved' && (
+                          <Button size="sm" onClick={() => handleStatusChange(appt.id, 'Completed')} className="bg-blue-600 hover:bg-blue-700 text-white">
+                            Complete
+                          </Button>
+                        )}
+                        {(appt.status === 'Pending' || appt.status === 'Approved') && (
+                          <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleStatusChange(appt.id, 'Cancelled')}>
+                            Cancel
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
