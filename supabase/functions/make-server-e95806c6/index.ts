@@ -669,7 +669,10 @@ app.post('/make-server-e95806c6/recurring-requests', async (c) => {
   }
 });
 
-// List requests: admins see everyone's, everyone else sees only their own.
+// List requests. Defaults to the caller's own — used by the /recurring page,
+// so an admin looking at "my requests" there sees exactly that, not
+// everyone's. Only ?all=true, and only for an actual admin, returns every
+// user's requests (used by the admin dashboard's Requests tab).
 app.get('/make-server-e95806c6/recurring-requests', async (c) => {
   const { userId, error: authError } = await verifyAuth(c);
   if (authError || !userId) {
@@ -677,8 +680,11 @@ app.get('/make-server-e95806c6/recurring-requests', async (c) => {
   }
 
   try {
+    const wantsAll = c.req.query('all') === 'true';
     const userProfile = await db.getUser(userId);
-    const requests = userProfile?.role === 'admin'
+    const isAdmin = userProfile?.role === 'admin';
+
+    const requests = wantsAll && isAdmin
       ? await db.getAllRecurringRequests()
       : await db.getRecurringRequestsByUser(userId);
 

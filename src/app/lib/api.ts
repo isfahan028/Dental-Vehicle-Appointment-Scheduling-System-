@@ -353,8 +353,25 @@ export async function createRecurringRequest(
   return result as { request: RecurringRequest; message: string };
 }
 
+// Always the caller's own requests, regardless of role — this is what the
+// /recurring page ("Your Requests") should show, even for an admin.
 export async function getRecurringRequests(accessToken: string): Promise<RecurringRequest[]> {
   const response = await fetch(`${API_BASE_URL}/recurring-requests`, {
+    headers: getAuthHeaders(accessToken),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to fetch recurring requests');
+  }
+
+  return data.requests;
+}
+
+// Admin only: every user's recurring requests, for the admin dashboard.
+export async function getAllRecurringRequests(accessToken: string): Promise<RecurringRequest[]> {
+  const response = await fetch(`${API_BASE_URL}/recurring-requests?all=true`, {
     headers: getAuthHeaders(accessToken),
   });
 

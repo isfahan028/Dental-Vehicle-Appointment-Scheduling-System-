@@ -52,7 +52,7 @@ export default function AdminDashboard() {
       api.getAppointments(accessToken),
       api.getVehicles(),
       api.getServices(),
-      api.getRecurringRequests(accessToken),
+      api.getAllRecurringRequests(accessToken),
       api.getAllUsers(accessToken),
     ]);
 
