@@ -114,6 +114,15 @@ export default function RecurringRequestPage() {
     }
   };
 
+  // Informational only — the patient doesn't set a price, and the admin may
+  // still offer a special rate when approving.
+  const selectedService = services.find((s) => s.id === serviceId);
+  const monthsNum = Number(months);
+  const estimate =
+    selectedService?.price != null && Number.isInteger(monthsNum) && monthsNum > 0
+      ? { rate: selectedService.price, months: monthsNum, total: selectedService.price * monthsNum }
+      : null;
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh]">
@@ -204,6 +213,17 @@ export default function RecurringRequestPage() {
           </div>
         </div>
 
+        {estimate && (
+          <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-800">
+            Estimated: ฿{estimate.rate}/month × {estimate.months} month(s) ={' '}
+            <span className="font-bold">฿{estimate.total} total</span>
+            <p className="mt-0.5 text-xs text-blue-600">
+              This is just an estimate at today's price — the admin confirms the final rate
+              (and may offer a special price) when approving.
+            </p>
+          </div>
+        )}
+
         <div className="flex justify-end pt-2">
           <Button type="submit" disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit Request'}
@@ -244,6 +264,9 @@ export default function RecurringRequestPage() {
                     <Clock size={14} /> {r.time}
                   </span>
                   <span>{r.months_requested} month(s)</span>
+                  {r.agreed_price != null && (
+                    <span className="font-semibold text-blue-600">฿{r.agreed_price}/month (special rate)</span>
+                  )}
                 </div>
                 {r.admin_note && (
                   <p className="text-sm text-gray-500 italic">"{r.admin_note}"</p>

@@ -383,6 +383,7 @@ const mapRecurringRequest = (row: any) => {
     time: row.appointment_time,
     months_requested: row.months_requested,
     status: row.status,
+    agreed_price: row.agreed_price != null ? Number(row.agreed_price) : null,
     admin_note: row.admin_note,
     reviewed_at: row.reviewed_at,
     created_at: row.created_at,
@@ -452,6 +453,7 @@ export async function updateRecurringRequestStatus(id: string, updates: any) {
   const supabase = client();
   const dbUpdates: any = {};
   if (updates.status !== undefined) dbUpdates.status = updates.status;
+  if (updates.agreed_price !== undefined) dbUpdates.agreed_price = updates.agreed_price;
   if (updates.admin_note !== undefined) dbUpdates.admin_note = updates.admin_note;
   if (updates.reviewed_by !== undefined) dbUpdates.reviewed_by = updates.reviewed_by;
   if (updates.reviewed_at !== undefined) dbUpdates.reviewed_at = updates.reviewed_at;

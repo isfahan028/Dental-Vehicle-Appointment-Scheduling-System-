@@ -29,6 +29,7 @@ export default function AdminDashboard() {
   const [roleChange, setRoleChange] = useState<{ user: UserType; nextRole: Role } | null>(null);
   const [deactivatingUser, setDeactivatingUser] = useState<UserType | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{ request: RecurringRequest; action: 'Approved' | 'Rejected' } | null>(null);
+  const [agreedPriceInput, setAgreedPriceInput] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [roleBusy, setRoleBusy] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
@@ -257,11 +258,21 @@ export default function AdminDashboard() {
   const confirmReview = async () => {
     if (!accessToken || !reviewTarget) return;
 
+    let agreedPrice: number | undefined;
+    if (reviewTarget.action === 'Approved' && agreedPriceInput.trim() !== '') {
+      const p = Number(agreedPriceInput);
+      if (Number.isNaN(p) || p < 0) {
+        toast.error('Special price must be a number of 0 or more');
+        return;
+      }
+      agreedPrice = p;
+    }
+
     setReviewBusy(true);
     try {
       const result = await api.reviewRecurringRequest(
         reviewTarget.request.id,
-        { status: reviewTarget.action },
+        { status: reviewTarget.action, agreed_price: agreedPrice },
         accessToken,
       );
       setRecurringRequests(prev =>
@@ -269,10 +280,11 @@ export default function AdminDashboard() {
       );
 
       if (reviewTarget.action === 'Approved') {
+        const rateNote = agreedPrice != null ? ` at ฿${agreedPrice}/month` : '';
         toast.success(
           result.skippedDates.length > 0
-            ? `Booked ${result.createdCount} of ${reviewTarget.request.months_requested} month(s). Skipped: ${result.skippedDates.join(', ')} (already booked).`
-            : `Booked all ${result.createdCount} month(s).`,
+            ? `Booked ${result.createdCount} of ${reviewTarget.request.months_requested} month(s)${rateNote}. Skipped: ${result.skippedDates.join(', ')} (already booked).`
+            : `Booked all ${result.createdCount} month(s)${rateNote}.`,
         );
         // New appointments were created behind the scenes — refresh the list.
         refetchAppointments();
@@ -284,6 +296,7 @@ export default function AdminDashboard() {
     } finally {
       setReviewBusy(false);
       setReviewTarget(null);
+      setAgreedPriceInput('');
     }
   };
 
@@ -660,6 +673,9 @@ export default function AdminDashboard() {
                         <Clock size={14} /> {r.time}
                       </span>
                       <span>{r.months_requested} month(s)</span>
+                      {r.agreed_price != null && (
+                        <span className="font-semibold text-blue-600">฿{r.agreed_price}/month (special rate)</span>
+                      )}
                     </div>
                     {r.admin_note && (
                       <p className="text-sm text-gray-500 italic">&quot;{r.admin_note}&quot;</p>
@@ -841,8 +857,38 @@ export default function AdminDashboard() {
           confirmLabel={reviewTarget.action === 'Approved' ? 'Approve' : 'Reject'}
           busy={reviewBusy}
           onConfirm={confirmReview}
-          onCancel={() => setReviewTarget(null)}
-        />
+          onCancel={() => {
+            setReviewTarget(null);
+            setAgreedPriceInput('');
+          }}
+        >
+          {reviewTarget.action === 'Approved' && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Special price per month{' '}
+                <span className="font-normal text-gray-400">
+                  (optional — leave blank to use the catalogue price
+                  {(() => {
+                    const svc = services.find(s => s.id === reviewTarget.request.service_id);
+                    return svc?.price != null ? `, ฿${svc.price}` : '';
+                  })()}
+                  )
+                </span>
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={agreedPriceInput}
+                onChange={(e) => setAgreedPriceInput(e.target.value)}
+                placeholder="e.g. 40"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Applies to all {reviewTarget.request.months_requested} appointment(s) this creates.
+              </p>
+            </div>
+          )}
+        </ConfirmDialog>
       )}
     </div>
   );

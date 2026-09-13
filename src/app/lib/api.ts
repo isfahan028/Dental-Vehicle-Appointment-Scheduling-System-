@@ -372,7 +372,7 @@ export async function getRecurringRequests(accessToken: string): Promise<Recurri
 // any, were skipped because that slot was already taken.
 export async function reviewRecurringRequest(
   id: string,
-  review: { status: 'Approved' | 'Rejected'; admin_note?: string },
+  review: { status: 'Approved' | 'Rejected'; admin_note?: string; agreed_price?: number },
   accessToken: string
 ): Promise<RecurringRequestResult> {
   const response = await fetch(`${API_BASE_URL}/recurring-requests/${id}`, {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from './Button';
 
@@ -10,6 +10,8 @@ interface ConfirmDialogProps {
   /** Red confirm button for destructive actions. */
   danger?: boolean;
   busy?: boolean;
+  /** Optional extra content (e.g. an input) between the message and buttons. */
+  children?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -21,6 +23,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   danger = false,
   busy = false,
+  children,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -54,6 +57,8 @@ export function ConfirmDialog({
             <p className="mt-1 text-sm text-gray-600">{message}</p>
           </div>
         </div>
+
+        {children && <div className="mt-4">{children}</div>}
 
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={onCancel} disabled={busy}>

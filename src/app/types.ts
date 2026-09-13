@@ -58,6 +58,9 @@ export type RecurringRequest = {
   time: string; // HH:mm
   months_requested: number;
   status: RecurringRequestStatus;
+  // Special monthly rate set by the admin at approval time; null = each
+  // generated appointment used the service's catalogue price instead.
+  agreed_price?: number | null;
   admin_note?: string | null;
   created_at: string;
   reviewed_at?: string | null;

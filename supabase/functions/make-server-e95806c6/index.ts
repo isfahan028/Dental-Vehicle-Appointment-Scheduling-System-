@@ -706,10 +706,19 @@ app.put('/make-server-e95806c6/recurring-requests/:id', async (c) => {
 
   try {
     const id = c.req.param('id');
-    const { status, admin_note } = await c.req.json();
+    const { status, admin_note, agreed_price } = await c.req.json();
 
     if (status !== 'Approved' && status !== 'Rejected') {
       return c.json({ error: "status must be 'Approved' or 'Rejected'" }, 400);
+    }
+
+    let agreedPrice: number | null = null;
+    if (agreed_price !== undefined && agreed_price !== null && agreed_price !== '') {
+      const p = Number(agreed_price);
+      if (Number.isNaN(p) || p < 0) {
+        return c.json({ error: 'agreed_price must be a number of 0 or more' }, 400);
+      }
+      agreedPrice = p;
     }
 
     const existing = await db.getRecurringRequest(id);
@@ -728,9 +737,14 @@ app.put('/make-server-e95806c6/recurring-requests/:id', async (c) => {
       return c.json({ request, createdCount: 0, skippedDates: [], message: 'Request rejected' });
     }
 
-    // Approved: generate one appointment per month.
+    // Approved: generate one appointment per month. A special per-month
+    // price the admin sets here (a package rate for committing to the
+    // series) overrides the service's catalogue price for every one of
+    // them; leaving it blank keeps today's behaviour.
     const service = await db.getService(existing.service_id);
     if (!service) return c.json({ error: 'Service no longer exists' }, 404);
+
+    const priceToUse = agreedPrice ?? service.price ?? null;
 
     const createdDates: string[] = [];
     const skippedDates: string[] = [];
@@ -750,7 +764,7 @@ app.put('/make-server-e95806c6/recurring-requests/:id', async (c) => {
           date,
           time: existing.time,
           status: 'Approved',
-          price: service.price ?? null,
+          price: priceToUse,
         });
         createdDates.push(date);
       } catch (err) {
@@ -765,11 +779,13 @@ app.put('/make-server-e95806c6/recurring-requests/:id', async (c) => {
     }
 
     const note = admin_note ??
-      `Booked ${createdDates.length} of ${existing.months_requested} month(s).` +
+      `Booked ${createdDates.length} of ${existing.months_requested} month(s)` +
+      (agreedPrice != null ? ` at ${agreedPrice}/month (special rate).` : '.') +
       (skippedDates.length ? ` Skipped: ${skippedDates.join(', ')} (slot already booked).` : '');
 
     const request = await db.updateRecurringRequestStatus(id, {
       status: 'Approved',
+      agreed_price: agreedPrice,
       admin_note: note,
       reviewed_by: userId,
       reviewed_at: new Date().toISOString(),
