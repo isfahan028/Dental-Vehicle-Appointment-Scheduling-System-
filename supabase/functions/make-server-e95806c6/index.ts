@@ -771,6 +771,7 @@ app.put('/make-server-e95806c6/recurring-requests/:id', async (c) => {
           time: existing.time,
           status: 'Approved',
           price: priceToUse,
+          recurring_request_id: existing.id,
         });
         createdDates.push(date);
       } catch (err) {
@@ -806,6 +807,57 @@ app.put('/make-server-e95806c6/recurring-requests/:id', async (c) => {
   } catch (error) {
     console.error(`Error reviewing recurring request: ${error}`);
     return c.json({ error: `Failed to review recurring request: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
+// Correct the price for an entire approved series in one action (admin
+// only) — updates every appointment this request generated, not just one.
+// Requests approved before recurring_request_id existed have no linked
+// appointments (updatedCount comes back 0); those still need editing one at
+// a time from the Appointments tab.
+app.put('/make-server-e95806c6/recurring-requests/:id/price', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  const userProfile = await db.getUser(userId);
+  if (!userProfile || userProfile.role !== 'admin') {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+
+  try {
+    const id = c.req.param('id');
+    const { price } = await c.req.json();
+
+    const p = Number(price);
+    if (price === undefined || price === null || Number.isNaN(p) || p < 0) {
+      return c.json({ error: 'price must be a number of 0 or more' }, 400);
+    }
+
+    const existing = await db.getRecurringRequest(id);
+    if (!existing) return c.json({ error: 'Request not found' }, 404);
+    if (existing.status !== 'Approved') {
+      return c.json({ error: 'Only an approved request has appointments to update' }, 400);
+    }
+
+    const updatedCount = await db.updateAppointmentsPriceByRequest(id, p);
+
+    // Don't record the new rate on the request if nothing was actually
+    // touched (a pre-migration request with no linked appointments) — the
+    // "special rate" badge should never claim a price that isn't real.
+    const request = updatedCount > 0
+      ? await db.updateRecurringRequestStatus(id, { agreed_price: p })
+      : existing;
+
+    return c.json({
+      request,
+      updatedCount,
+      message: `Updated price for ${updatedCount} appointment(s)`,
+    });
+  } catch (error) {
+    console.error(`Error bulk-updating recurring request price: ${error}`);
+    return c.json({ error: `Failed to update price: ${error instanceof Error ? error.message : String(error)}` }, 500);
   }
 });
 

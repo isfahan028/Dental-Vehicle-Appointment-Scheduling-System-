@@ -407,6 +407,28 @@ export async function reviewRecurringRequest(
   return data;
 }
 
+// Admin only: correct the price for every appointment an approved request
+// generated, in one action.
+export async function updateRecurringRequestPrice(
+  id: string,
+  price: number,
+  accessToken: string
+): Promise<{ request: RecurringRequest; updatedCount: number; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/recurring-requests/${id}/price`, {
+    method: 'PUT',
+    headers: getAuthHeaders(accessToken),
+    body: JSON.stringify({ price }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to update price');
+  }
+
+  return data;
+}
+
 export async function deleteRecurringRequest(id: string, accessToken: string) {
   const response = await fetch(`${API_BASE_URL}/recurring-requests/${id}`, {
     method: 'DELETE',

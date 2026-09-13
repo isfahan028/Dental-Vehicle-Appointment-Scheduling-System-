@@ -30,10 +30,13 @@ export default function AdminDashboard() {
   const [deactivatingUser, setDeactivatingUser] = useState<UserType | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{ request: RecurringRequest; action: 'Approved' | 'Rejected' } | null>(null);
   const [agreedPriceInput, setAgreedPriceInput] = useState('');
+  const [bulkPriceTarget, setBulkPriceTarget] = useState<RecurringRequest | null>(null);
+  const [bulkPriceInput, setBulkPriceInput] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [roleBusy, setRoleBusy] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
+  const [bulkPriceBusy, setBulkPriceBusy] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<DentalVehicle[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -297,6 +300,38 @@ export default function AdminDashboard() {
       setReviewBusy(false);
       setReviewTarget(null);
       setAgreedPriceInput('');
+    }
+  };
+
+  const confirmBulkPrice = async () => {
+    if (!accessToken || !bulkPriceTarget) return;
+
+    const p = Number(bulkPriceInput);
+    if (bulkPriceInput.trim() === '' || Number.isNaN(p) || p < 0) {
+      toast.error('Price must be a number of 0 or more');
+      return;
+    }
+
+    setBulkPriceBusy(true);
+    try {
+      const result = await api.updateRecurringRequestPrice(bulkPriceTarget.id, p, accessToken);
+      setRecurringRequests(prev =>
+        prev.map(r => (r.id === bulkPriceTarget.id ? result.request : r)),
+      );
+      if (result.updatedCount > 0) {
+        toast.success(`Updated price for ${result.updatedCount} appointment(s)`);
+        refetchAppointments();
+      } else {
+        toast.error(
+          'No linked appointments found — this request was approved before this feature existed. Edit each month individually in Appointments instead.',
+        );
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update price');
+    } finally {
+      setBulkPriceBusy(false);
+      setBulkPriceTarget(null);
+      setBulkPriceInput('');
     }
   };
 
@@ -701,6 +736,20 @@ export default function AdminDashboard() {
                       </Button>
                     </div>
                   )}
+
+                  {r.status === 'Approved' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="self-start md:self-center"
+                      onClick={() => {
+                        setBulkPriceTarget(r);
+                        setBulkPriceInput(r.agreed_price != null ? String(r.agreed_price) : '');
+                      }}
+                    >
+                      Edit price for all months
+                    </Button>
+                  )}
                 </div>
               ))
           )}
@@ -888,6 +937,36 @@ export default function AdminDashboard() {
               </p>
             </div>
           )}
+        </ConfirmDialog>
+      )}
+
+      {bulkPriceTarget && (
+        <ConfirmDialog
+          title="Edit price for all months"
+          message={`Sets the price for every appointment "${bulkPriceTarget.user_name}"'s "${bulkPriceTarget.service_name}" series generated (${bulkPriceTarget.months_requested} month(s)).`}
+          confirmLabel="Update Price"
+          busy={bulkPriceBusy}
+          onConfirm={confirmBulkPrice}
+          onCancel={() => {
+            setBulkPriceTarget(null);
+            setBulkPriceInput('');
+          }}
+        >
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">New price per month</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              autoFocus
+              value={bulkPriceInput}
+              onChange={(e) => setBulkPriceInput(e.target.value)}
+              placeholder="e.g. 40"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              Applies to every appointment linked to this request, whatever its current status.
+            </p>
+          </div>
         </ConfirmDialog>
       )}
     </div>
