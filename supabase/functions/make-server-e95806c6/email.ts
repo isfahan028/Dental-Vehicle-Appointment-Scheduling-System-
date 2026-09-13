@@ -18,6 +18,13 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
     return;
   }
 
+  // Email addresses aren't case-sensitive, but Resend's sandbox check (only
+  // deliver to the account's own address until a domain is verified) does an
+  // exact string match — a user who signed up as "Isfahan502412@gmail.com"
+  // got rejected against a Resend account created as "isfahan502412@...".
+  // Normalizing here fixes that for every address, not just this one.
+  const normalizedTo = to.trim().toLowerCase();
+
   try {
     const res = await fetch(RESEND_API_URL, {
       method: 'POST',
@@ -25,17 +32,17 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from: FROM_ADDRESS, to: [to], subject, html }),
+      body: JSON.stringify({ from: FROM_ADDRESS, to: [normalizedTo], subject, html }),
     });
 
     if (!res.ok) {
       const body = await res.text();
-      console.error(`Email send failed (${res.status}) to ${to}: ${body}`);
+      console.error(`Email send failed (${res.status}) to ${normalizedTo}: ${body}`);
       return;
     }
-    console.log(`Email sent to ${to}: ${subject}`);
+    console.log(`Email sent to ${normalizedTo}: ${subject}`);
   } catch (err) {
-    console.error(`Email send threw for ${to}:`, err);
+    console.error(`Email send threw for ${normalizedTo}:`, err);
   }
 }
 
