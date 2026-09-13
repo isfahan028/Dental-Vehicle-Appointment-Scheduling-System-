@@ -7,13 +7,35 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { VehicleFormModal } from '../components/admin/VehicleFormModal';
 import { ServiceFormModal } from '../components/admin/ServiceFormModal';
-import { Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil, Repeat, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import {
+  Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil, Repeat,
+  ChevronLeft, ChevronRight, LayoutDashboard, ClipboardList, CalendarDays, Truck, Users,
+} from 'lucide-react';
 import { buildMonthGrid, monthLabel, toDateKey } from '../lib/slots';
 import { withRetry } from '../lib/retry';
 
 const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
 type AppointmentFilter = (typeof APPOINTMENT_FILTERS)[number];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const ADMIN_TABS = ['appointments', 'calendar', 'vehicles', 'services', 'requests', 'users'] as const;
+const TAB_ICONS = {
+  appointments: ClipboardList,
+  calendar: CalendarDays,
+  vehicles: Truck,
+  services: Tag,
+  requests: Repeat,
+  users: Users,
+} as const;
+const AVATAR_COLORS = [
+  'bg-blue-100 text-blue-700', 'bg-purple-100 text-purple-700', 'bg-green-100 text-green-700',
+  'bg-orange-100 text-orange-700', 'bg-pink-100 text-pink-700', 'bg-teal-100 text-teal-700',
+];
+function avatarColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
 import { toast } from 'sonner';
 import { useRealtimeRefetch } from '../hooks/useRealtime';
 import { usePolling } from '../hooks/usePolling';
@@ -396,29 +418,38 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b pb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-500">Manage your dental fleet and appointments.</p>
+        <div className="flex items-center gap-4">
+          <div className="hidden sm:flex w-14 h-14 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-blue-400 text-white shadow-lg shadow-blue-200">
+            <LayoutDashboard size={26} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-gray-500">Manage your dental fleet and appointments.</p>
+          </div>
         </div>
         <div className="flex bg-gray-100 p-1 rounded-lg flex-wrap">
-          {(['appointments', 'calendar', 'vehicles', 'services', 'requests', 'users'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-all capitalize flex items-center gap-1.5 ${
-                activeTab === tab
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {tab}
-              {tab === 'requests' && pendingRequestCount > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-yellow-400 text-yellow-900 text-xs font-bold">
-                  {pendingRequestCount}
-                </span>
-              )}
-            </button>
-          ))}
+          {ADMIN_TABS.map((tab) => {
+            const Icon = TAB_ICONS[tab];
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all capitalize flex items-center gap-1.5 ${
+                  activeTab === tab
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Icon size={15} />
+                {tab}
+                {tab === 'requests' && pendingRequestCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-yellow-400 text-yellow-900 text-xs font-bold">
+                    {pendingRequestCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -782,44 +813,53 @@ export default function AdminDashboard() {
       {activeTab === 'vehicles' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {vehicles.map((vehicle) => (
-            <div key={vehicle.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-lg font-bold text-gray-900">{vehicle.name}</h3>
-                <span className={`px-2 py-1 text-xs rounded font-bold ${vehicle.is_available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  {vehicle.is_available ? 'Active' : 'Maintenance'}
-                </span>
+            <div key={vehicle.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow overflow-hidden">
+              <div className="h-36 w-full overflow-hidden bg-gray-100">
+                <ImageWithFallback
+                  src={vehicle.image_url}
+                  alt={vehicle.name}
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <div className="space-y-2 text-gray-600 mb-6">
-                <p className="flex items-center gap-2 text-sm"><MapPin size={16} /> {vehicle.location}</p>
-                <p className="flex items-center gap-2 text-sm"><Clock size={16} /> 9AM - 5PM</p>
-                {vehicle.latitude != null && vehicle.longitude != null && (
-                  <p className="text-xs text-gray-400">
-                    {vehicle.latitude}, {vehicle.longitude}
-                  </p>
-                )}
-              </div>
-              <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setVehicleForm({ vehicle })}
-                >
-                  Edit Details
-                </Button>
-                <div className="flex items-center gap-3">
-                  <Link
-                    to={`/calendar?vehicleId=${vehicle.id}`}
-                    className="text-blue-600 text-sm font-medium hover:underline"
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">{vehicle.name}</h3>
+                  <span className={`px-2 py-1 text-xs rounded font-bold ${vehicle.is_available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {vehicle.is_available ? 'Active' : 'Maintenance'}
+                  </span>
+                </div>
+                <div className="space-y-2 text-gray-600 mb-6">
+                  <p className="flex items-center gap-2 text-sm"><MapPin size={16} /> {vehicle.location}</p>
+                  <p className="flex items-center gap-2 text-sm"><Clock size={16} /> 9AM - 5PM</p>
+                  {vehicle.latitude != null && vehicle.longitude != null && (
+                    <p className="text-xs text-gray-400">
+                      {vehicle.latitude}, {vehicle.longitude}
+                    </p>
+                  )}
+                </div>
+                <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVehicleForm({ vehicle })}
                   >
-                    View Schedule
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => setDeletingVehicle(vehicle)}
-                    className="text-red-600 text-sm font-medium hover:underline"
-                  >
-                    Delete
-                  </button>
+                    Edit Details
+                  </Button>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      to={`/calendar?vehicleId=${vehicle.id}`}
+                      className="text-blue-600 text-sm font-medium hover:underline"
+                    >
+                      View Schedule
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingVehicle(vehicle)}
+                      className="text-red-600 text-sm font-medium hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -842,7 +882,12 @@ export default function AdminDashboard() {
           {services.map((service) => (
             <div key={service.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-3">
-                <h3 className="text-lg font-bold text-gray-900">{service.name}</h3>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <Tag size={18} />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">{service.name}</h3>
+                </div>
                 <span className="text-lg font-bold text-blue-600">฿{service.price ?? 0}</span>
               </div>
               <div className="space-y-2 text-gray-600 mb-6">
@@ -994,7 +1039,14 @@ export default function AdminDashboard() {
             <tbody className="bg-white divide-y divide-gray-200">
               {users.map((u) => (
                 <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{u.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarColor(u.id)}`}>
+                        {u.name.charAt(0).toUpperCase()}
+                      </div>
+                      {u.name}
+                    </div>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.email}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{u.role.replace('_', ' ')}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
