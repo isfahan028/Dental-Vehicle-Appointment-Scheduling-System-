@@ -145,6 +145,19 @@ export default function AdminDashboard() {
     setSelectedCalDate(null);
   };
 
+  // Tints the whole day cell, not just a small dot, so busy days are
+  // obvious at a glance. Priority: needs-attention statuses win, so a mixed
+  // day still reads as "something to do here" rather than defaulting to a
+  // pale, ambiguous color.
+  function calDayTone(dayAppts: Appointment[]): string {
+    if (dayAppts.length === 0) return 'bg-gray-50 hover:bg-gray-100';
+    const has = (s: AppointmentStatus) => dayAppts.some((a) => a.status === s);
+    if (has('Pending')) return 'bg-yellow-100 hover:ring-2 hover:ring-yellow-400';
+    if (has('Approved')) return 'bg-green-100 hover:ring-2 hover:ring-green-400';
+    if (has('Completed')) return 'bg-blue-100 hover:ring-2 hover:ring-blue-400';
+    return 'bg-gray-200 hover:ring-2 hover:ring-gray-400';
+  }
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh]">
@@ -637,11 +650,11 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-gray-600">
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-yellow-400" /> Pending</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-green-500" /> Approved</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Completed</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-gray-300" /> Cancelled</span>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-gray-700">
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-yellow-500" /> Pending</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-green-600" /> Approved</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-600" /> Completed</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-gray-500" /> Cancelled</span>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4">
@@ -667,22 +680,22 @@ export default function AdminDashboard() {
                     onClick={() => setSelectedCalDate(isSelected ? null : key)}
                     className={[
                       'relative flex flex-col rounded-xl p-2 min-h-[4.5rem] sm:min-h-[5rem] text-left transition-all',
-                      dayAppts.length > 0 ? 'bg-blue-50/60 hover:ring-2 hover:ring-blue-300' : 'bg-gray-50 hover:bg-gray-100',
+                      calDayTone(dayAppts),
                       inMonth ? '' : 'opacity-40',
                       isSelected ? 'ring-2 ring-blue-600' : '',
-                      isToday ? 'outline outline-2 outline-offset-1 outline-blue-400' : '',
+                      isToday ? 'outline outline-2 outline-offset-1 outline-blue-500' : '',
                     ].join(' ')}
                   >
-                    <span className="text-sm font-bold text-gray-700">{date.getDate()}</span>
+                    <span className="text-sm font-bold text-gray-800">{date.getDate()}</span>
                     {dayAppts.length > 0 && (
                       <span className="mt-auto space-y-1">
                         <span className="flex gap-1 flex-wrap">
-                          {statusesPresent.has('Pending') && <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />}
-                          {statusesPresent.has('Approved') && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
-                          {statusesPresent.has('Completed') && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-                          {statusesPresent.has('Cancelled') && <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />}
+                          {statusesPresent.has('Pending') && <span className="h-2.5 w-2.5 rounded-full bg-yellow-500 ring-2 ring-white" />}
+                          {statusesPresent.has('Approved') && <span className="h-2.5 w-2.5 rounded-full bg-green-600 ring-2 ring-white" />}
+                          {statusesPresent.has('Completed') && <span className="h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white" />}
+                          {statusesPresent.has('Cancelled') && <span className="h-2.5 w-2.5 rounded-full bg-gray-500 ring-2 ring-white" />}
                         </span>
-                        <span className="block text-[11px] font-medium text-gray-600">
+                        <span className="block text-[11px] font-bold text-gray-700">
                           {dayAppts.length} appt{dayAppts.length > 1 ? 's' : ''}
                         </span>
                       </span>
