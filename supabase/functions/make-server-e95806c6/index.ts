@@ -11,6 +11,7 @@ import {
   recurringApprovedEmail,
   recurringRejectedEmail,
 } from './email.ts';
+import * as vtrack from './vtrack.ts';
 
 const app = new Hono();
 
@@ -1044,6 +1045,32 @@ app.put('/make-server-e95806c6/admin/users/:id', async (c) => {
   } catch (error) {
     console.error(`Error updating user: ${error}`);
     return c.json({ error: `Failed to update user: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
+// Live camera vehicles from the V-Track cloud (admin only). Each online
+// vehicle comes with a playerUrl the admin opens in a new tab.
+app.get('/make-server-e95806c6/vtrack/vehicles', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  const userProfile = await db.getUser(userId);
+  if (!userProfile || userProfile.role !== 'admin') {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+
+  try {
+    const vehicles = await vtrack.getVehicles();
+    return c.json({ vehicles });
+  } catch (error) {
+    if (error instanceof vtrack.VtrackNotConfiguredError) {
+      return c.json({ error: 'Live camera is not configured yet (V-Track credentials missing).' }, 503);
+    }
+    console.error(`Error fetching V-Track vehicles: ${error}`);
+    return c.json({ error: `Failed to reach the camera platform: ${error instanceof Error ? error.message : String(error)}` }, 502);
   }
 });
 

@@ -7,10 +7,11 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { VehicleFormModal } from '../components/admin/VehicleFormModal';
 import { ServiceFormModal } from '../components/admin/ServiceFormModal';
+import { LiveTab } from '../components/admin/LiveTab';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import {
   Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil, Repeat,
-  ChevronLeft, ChevronRight, LayoutDashboard, ClipboardList, CalendarDays, Truck, Users,
+  ChevronLeft, ChevronRight, LayoutDashboard, ClipboardList, CalendarDays, Truck, Users, Video,
 } from 'lucide-react';
 import { buildMonthGrid, monthLabel, toDateKey } from '../lib/slots';
 import { withRetry } from '../lib/retry';
@@ -18,11 +19,12 @@ import { withRetry } from '../lib/retry';
 const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
 type AppointmentFilter = (typeof APPOINTMENT_FILTERS)[number];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const ADMIN_TABS = ['appointments', 'calendar', 'vehicles', 'services', 'requests', 'users'] as const;
+const ADMIN_TABS = ['appointments', 'calendar', 'vehicles', 'live', 'services', 'requests', 'users'] as const;
 const TAB_ICONS = {
   appointments: ClipboardList,
   calendar: CalendarDays,
   vehicles: Truck,
+  live: Video,
   services: Tag,
   requests: Repeat,
   users: Users,
@@ -42,7 +44,7 @@ import { usePolling } from '../hooks/usePolling';
 
 export default function AdminDashboard() {
   const { user, isAdmin, accessToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<'appointments' | 'calendar' | 'vehicles' | 'services' | 'requests' | 'users'>('appointments');
+  const [activeTab, setActiveTab] = useState<(typeof ADMIN_TABS)[number]>('appointments');
   const [apptFilter, setApptFilter] = useState<AppointmentFilter>('All');
   const [apptSearch, setApptSearch] = useState('');
   const [editingPrice, setEditingPrice] = useState<{ id: string; value: string } | null>(null);
@@ -876,6 +878,8 @@ export default function AdminDashboard() {
           </button>
         </div>
       )}
+
+      {activeTab === 'live' && accessToken && <LiveTab accessToken={accessToken} />}
 
       {activeTab === 'services' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

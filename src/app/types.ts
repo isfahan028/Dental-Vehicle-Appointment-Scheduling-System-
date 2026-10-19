@@ -77,3 +77,14 @@ export type RecurringRequestResult = {
   createdCount: number;
   skippedDates: string[];
 };
+
+// A vehicle on the V-Track live-video cloud (separate from DentalVehicle —
+// the two aren't linked yet).
+export type LiveVehicle = {
+  id: string;
+  name: string;
+  deviceNo: string | null;
+  channelCount: number;
+  online: boolean;
+  playerUrl: string | null; // set only when online; opens the platform's player
+};

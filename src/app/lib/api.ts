@@ -1,5 +1,5 @@
 import { projectId, publicAnonKey } from "../utils/supabase/info";
-import type { User, DentalVehicle, Service, Appointment, AppointmentStatus, RecurringRequest, RecurringRequestResult } from '../types';
+import type { User, DentalVehicle, Service, Appointment, AppointmentStatus, RecurringRequest, RecurringRequestResult, LiveVehicle } from '../types';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-e95806c6`;
 
@@ -488,6 +488,23 @@ export async function getDashboardStats(accessToken: string) {
   }
 
   return data.stats;
+}
+
+// ===== LIVE CAMERA (V-Track) =====
+
+// Admin only: vehicles on the V-Track video cloud with online status.
+export async function getLiveVehicles(accessToken: string): Promise<LiveVehicle[]> {
+  const response = await fetch(`${API_BASE_URL}/vtrack/vehicles`, {
+    headers: getAuthHeaders(accessToken),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to fetch live vehicles');
+  }
+
+  return data.vehicles;
 }
 
 // ===== INITIALIZATION =====
