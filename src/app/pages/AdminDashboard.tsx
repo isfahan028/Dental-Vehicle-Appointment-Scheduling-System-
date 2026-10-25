@@ -41,6 +41,7 @@ function avatarColor(seed: string): string {
 import { toast } from 'sonner';
 import { useRealtimeRefetch } from '../hooks/useRealtime';
 import { usePolling } from '../hooks/usePolling';
+import { useLiveVehicles } from '../hooks/useLiveVehicles';
 
 export default function AdminDashboard() {
   const { user, isAdmin, accessToken } = useAuth();
@@ -132,6 +133,8 @@ export default function AdminDashboard() {
   useRealtimeRefetch('appointments', refetchAppointments, { enabled: canLoad });
   // Vehicles / users change rarely — a periodic refresh is enough.
   usePolling(loadAll, { intervalMs: 30_000, enabled: canLoad });
+  // Camera online status — feeds both the "Live Cameras" stat and the Live tab.
+  const live = useLiveVehicles(accessToken, { enabled: canLoad });
 
   // Client-side filter + search + newest-first sort for the appointments table.
   const visibleAppointments = useMemo(() => {
@@ -456,7 +459,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
           <div className="bg-blue-100 p-3 rounded-full text-blue-600">
             <Calendar size={24} />
@@ -496,6 +499,26 @@ export default function AdminDashboard() {
             <p className="text-2xl font-bold text-gray-900">{totalUsers}</p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('live')}
+          title="Open the Live tab"
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 text-left hover:shadow-md hover:border-red-200 transition-all"
+        >
+          <div className="relative bg-red-100 p-3 rounded-full text-red-600">
+            <Video size={24} />
+            {live.onlineCount > 0 && (
+              <span className="absolute top-0 right-0 w-3 h-3 rounded-full bg-red-500 ring-2 ring-white animate-pulse" />
+            )}
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Live Cameras</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {live.isLoading || live.error ? '—' : `${live.onlineCount} / ${live.vehicles.length}`}
+            </p>
+          </div>
+        </button>
       </div>
 
       {activeTab === 'appointments' && (
@@ -879,7 +902,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {activeTab === 'live' && accessToken && <LiveTab accessToken={accessToken} />}
+      {activeTab === 'live' && <LiveTab live={live} />}
 
       {activeTab === 'services' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

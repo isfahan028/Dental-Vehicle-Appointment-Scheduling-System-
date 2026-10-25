@@ -1,45 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ExternalLink, RefreshCw, Video, VideoOff } from 'lucide-react';
-import * as api from '../../lib/api';
-import type { LiveVehicle } from '../../types';
+import type { useLiveVehicles } from '../../hooks/useLiveVehicles';
 import { Button } from '../ui/Button';
-import { usePolling } from '../../hooks/usePolling';
 
-// Live camera feeds from the V-Track vehicle-video cloud. Loaded on its own
-// (not in the dashboard's loadAll) so a camera-platform outage never shows up
-// as a dashboard-wide "failed to load" error.
+// Live camera feeds from the V-Track vehicle-video cloud. The data comes from
+// the dashboard (useLiveVehicles), which also feeds the "Live Cameras" stat.
 //
 // The player opens in a new tab rather than inline: the platform only serves
 // http and streams over ws://, which an https page can't embed or proxy.
-export function LiveTab({ accessToken }: { accessToken: string }) {
-  const [vehicles, setVehicles] = useState<LiveVehicle[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const load = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      setVehicles(await api.getLiveVehicles(accessToken));
-      setError(null);
-    } catch (err) {
-      console.error('Failed to load live vehicles:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load live vehicles');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [accessToken]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Online status changes as vehicles come and go; this also keeps the
-  // jsession inside each playerUrl fresh.
-  usePolling(load, { intervalMs: 30_000 });
-
-  const onlineCount = vehicles.filter(v => v.online).length;
+export function LiveTab({ live }: { live: ReturnType<typeof useLiveVehicles> }) {
+  const { vehicles, onlineCount, error, isLoading, isRefreshing, reload } = live;
 
   return (
     <div className="space-y-4">
@@ -52,7 +21,7 @@ export function LiveTab({ accessToken }: { accessToken: string }) {
               : `${onlineCount} of ${vehicles.length} vehicle${vehicles.length === 1 ? '' : 's'} online · video opens in a new tab`}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={isRefreshing} className="gap-1.5 self-start sm:self-auto">
+        <Button variant="outline" size="sm" onClick={reload} disabled={isRefreshing} className="gap-1.5 self-start sm:self-auto">
           <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
           Refresh
         </Button>
