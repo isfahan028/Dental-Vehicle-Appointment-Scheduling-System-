@@ -25,11 +25,15 @@ const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
 );
 
-// Helper to generate a simple secure token
+// Session token: 256 bits from the OS CSPRNG. Never use Math.random() here —
+// it's a fast, non-cryptographic PRNG whose internal state can be recovered
+// from a few outputs, which would let an attacker predict other users'
+// tokens (OWASP: session IDs must come from a CSPRNG).
 function generateToken() {
-  const randomPart = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
-  const timePart = Date.now().toString(36);
-  return `mts_${timePart}_${randomPart}`;
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `mts_${hex}`;
 }
 
 // Helper function to verify user authentication
