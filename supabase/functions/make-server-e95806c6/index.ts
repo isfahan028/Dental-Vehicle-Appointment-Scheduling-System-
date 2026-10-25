@@ -89,6 +89,17 @@ async function recordLoginFailure(email: string, ip: string | null): Promise<num
   }
 }
 
+// ===== LOGIN HISTORY =====
+// Audit log of every sign-in attempt (migration 11). Best-effort: a failure
+// to write history is logged and never blocks or breaks the sign-in itself.
+async function recordLoginHistory(entry: Parameters<typeof db.recordLoginHistory>[0]) {
+  try {
+    await db.recordLoginHistory(entry);
+  } catch (error) {
+    console.error(`Failed to record login history: ${error}`);
+  }
+}
+
 // Helper function to verify user authentication
 // Reads the custom session token from X-Session-Token header.
 async function verifyAuth(c: any) {
@@ -194,10 +205,15 @@ app.post('/make-server-e95806c6/auth/signin', async (c) => {
     // if the next guess happens to be right.
     const normalizedEmail = String(email).trim().toLowerCase();
     const ip = clientIp(c);
+    const userAgent = c.req.header('user-agent') ?? null;
+    const logLogin = (userId: string | null, success: boolean, reason: string) =>
+      recordLoginHistory({ userId, email: normalizedEmail, success, reason, ipAddress: ip, userAgent });
+
     const lockSeconds = await loginLockSeconds(normalizedEmail, ip);
     if (lockSeconds !== null) {
       const minutes = Math.ceil(lockSeconds / 60);
       console.log(`Sign in blocked by rate limit: ${normalizedEmail} (ip ${ip ?? 'unknown'})`);
+      await logLogin(null, false, 'locked');
       c.header('Retry-After', String(lockSeconds));
       return c.json({
         error: `Too many failed sign-in attempts. Please try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
@@ -212,6 +228,7 @@ app.post('/make-server-e95806c6/auth/signin', async (c) => {
 
     if (error) {
       console.log(`Sign in error: ${error.message}`);
+      await logLogin(null, false, 'wrong_password');
       const triesLeft = await recordLoginFailure(normalizedEmail, ip);
       const hint = triesLeft !== null && triesLeft <= 3
         ? (triesLeft === 0
@@ -232,11 +249,14 @@ app.post('/make-server-e95806c6/auth/signin', async (c) => {
     const userProfile = await db.getUser(data.user.id);
 
     if (!userProfile) {
+      // No users row to point user_id at, so log by email only.
+      await logLogin(null, false, 'no_profile');
       return c.json({ error: 'User profile not found' }, 404);
     }
 
     if (!userProfile.is_active) {
       console.log(`Sign in blocked - account deactivated: ${data.user.id}`);
+      await logLogin(data.user.id, false, 'deactivated');
       return c.json({ error: 'This account has been deactivated. Contact an administrator.' }, 403);
     }
 
@@ -247,6 +267,7 @@ app.post('/make-server-e95806c6/auth/signin', async (c) => {
     await db.createSession(customToken, data.user.id);
     
     console.log(`User ${data.user.id} signed in successfully, session created`);
+    await logLogin(data.user.id, true, 'success');
 
     return c.json({
       access_token: customToken,
@@ -1129,6 +1150,30 @@ app.put('/make-server-e95806c6/admin/users/:id', async (c) => {
   } catch (error) {
     console.error(`Error updating user: ${error}`);
     return c.json({ error: `Failed to update user: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+
+// Sign-in audit log, newest first (admin only). ?limit= caps rows (max 1000).
+app.get('/make-server-e95806c6/admin/login-history', async (c) => {
+  const { userId, error: authError } = await verifyAuth(c);
+
+  if (authError || !userId) {
+    return c.json({ error: authError || 'Unauthorized' }, 401);
+  }
+
+  const userProfile = await db.getUser(userId);
+  if (!userProfile || userProfile.role !== 'admin') {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+
+  try {
+    const requested = Number(c.req.query('limit') ?? 300);
+    const limit = Number.isFinite(requested) ? Math.min(Math.max(Math.floor(requested), 1), 1000) : 300;
+    const history = await db.getLoginHistory(limit);
+    return c.json({ history });
+  } catch (error) {
+    console.error(`Error fetching login history: ${error}`);
+    return c.json({ error: `Failed to fetch login history: ${error instanceof Error ? error.message : String(error)}` }, 500);
   }
 });
 

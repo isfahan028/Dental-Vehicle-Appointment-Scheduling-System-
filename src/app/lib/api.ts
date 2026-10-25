@@ -1,5 +1,5 @@
 import { projectId, publicAnonKey } from "../utils/supabase/info";
-import type { User, DentalVehicle, Service, Appointment, AppointmentStatus, RecurringRequest, RecurringRequestResult, LiveVehicle } from '../types';
+import type { User, DentalVehicle, Service, Appointment, AppointmentStatus, RecurringRequest, RecurringRequestResult, LiveVehicle, LoginHistoryEntry } from '../types';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-e95806c6`;
 
@@ -488,6 +488,21 @@ export async function getDashboardStats(accessToken: string) {
   }
 
   return data.stats;
+}
+
+// Admin only: sign-in audit log, newest first.
+export async function getLoginHistory(accessToken: string, limit = 300): Promise<LoginHistoryEntry[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/login-history?limit=${limit}`, {
+    headers: getAuthHeaders(accessToken),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to fetch login history');
+  }
+
+  return data.history;
 }
 
 // ===== LIVE CAMERA (V-Track) =====

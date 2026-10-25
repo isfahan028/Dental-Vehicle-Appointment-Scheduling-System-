@@ -8,10 +8,11 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { VehicleFormModal } from '../components/admin/VehicleFormModal';
 import { ServiceFormModal } from '../components/admin/ServiceFormModal';
 import { LiveTab } from '../components/admin/LiveTab';
+import { LoginsTab } from '../components/admin/LoginsTab';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import {
   Calendar, Clock, MapPin, User, Settings, AlertCircle, Activity, Search, Tag, Pencil, Repeat,
-  ChevronLeft, ChevronRight, LayoutDashboard, ClipboardList, CalendarDays, Truck, Users, Video,
+  ChevronLeft, ChevronRight, LayoutDashboard, ClipboardList, CalendarDays, Truck, Users, Video, History,
 } from 'lucide-react';
 import { buildMonthGrid, monthLabel, toDateKey } from '../lib/slots';
 import { withRetry } from '../lib/retry';
@@ -19,7 +20,7 @@ import { withRetry } from '../lib/retry';
 const APPOINTMENT_FILTERS = ['All', 'Pending', 'Approved', 'Completed', 'Cancelled'] as const;
 type AppointmentFilter = (typeof APPOINTMENT_FILTERS)[number];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const ADMIN_TABS = ['appointments', 'calendar', 'vehicles', 'live', 'services', 'requests', 'users'] as const;
+const ADMIN_TABS = ['appointments', 'calendar', 'vehicles', 'live', 'services', 'requests', 'users', 'logins'] as const;
 const TAB_ICONS = {
   appointments: ClipboardList,
   calendar: CalendarDays,
@@ -28,6 +29,7 @@ const TAB_ICONS = {
   services: Tag,
   requests: Repeat,
   users: Users,
+  logins: History,
 } as const;
 const AVATAR_COLORS = [
   'bg-blue-100 text-blue-700', 'bg-purple-100 text-purple-700', 'bg-green-100 text-green-700',
@@ -1050,6 +1052,8 @@ export default function AdminDashboard() {
           )}
         </div>
       )}
+
+      {activeTab === 'logins' && accessToken && <LoginsTab accessToken={accessToken} />}
 
       {activeTab === 'users' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

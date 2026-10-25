@@ -69,6 +69,51 @@ export async function pruneLoginAttempts(beforeIso: string) {
   if (error) throw new Error(error.message);
 }
 
+// ===== LOGIN HISTORY (audit log) =====
+
+export async function recordLoginHistory(entry: {
+  userId: string | null;
+  email: string;
+  success: boolean;
+  reason: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+}) {
+  const supabase = client();
+  const { error } = await supabase.from('login_history').insert({
+    user_id: entry.userId,
+    email: entry.email,
+    success: entry.success,
+    reason: entry.reason,
+    ip_address: entry.ipAddress,
+    user_agent: entry.userAgent,
+  });
+  if (error) throw new Error(error.message);
+}
+
+// Newest first, with the account's current name when we know whose it was.
+export async function getLoginHistory(limit: number) {
+  const supabase = client();
+  const { data, error } = await supabase
+    .from('login_history')
+    .select('*, users(name)')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  // deno-lint-ignore no-explicit-any
+  return (data ?? []).map((row: any) => ({
+    id: String(row.history_id),
+    user_id: row.user_id,
+    user_name: row.users?.name ?? null,
+    email: row.email,
+    success: row.success,
+    reason: row.reason,
+    ip_address: row.ip_address,
+    user_agent: row.user_agent,
+    created_at: row.created_at,
+  }));
+}
+
 // ===== USERS =====
 
 const mapUser = (dbUser: any) => ({

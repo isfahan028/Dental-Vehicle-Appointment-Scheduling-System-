@@ -88,3 +88,18 @@ export type LiveVehicle = {
   online: boolean;
   playerUrl: string | null; // set only when online; opens the platform's player
 };
+
+export type LoginReason = 'success' | 'wrong_password' | 'locked' | 'deactivated' | 'no_profile';
+
+// One sign-in attempt from the audit log (admin "Logins" tab).
+export type LoginHistoryEntry = {
+  id: string;
+  user_id: string | null; // null when the password was wrong — we can't tell whose account
+  user_name: string | null;
+  email: string;
+  success: boolean;
+  reason: LoginReason;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+};
