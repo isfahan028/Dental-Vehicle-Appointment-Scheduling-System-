@@ -100,6 +100,8 @@ async function recordLoginHistory(entry: Parameters<typeof db.recordLoginHistory
   }
 }
 
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 // Helper function to verify user authentication
 // Reads the custom session token from X-Session-Token header.
 async function verifyAuth(c: any) {
@@ -120,7 +122,7 @@ async function verifyAuth(c: any) {
   
   // Check if session is expired (7 days)
   const sessionAge = Date.now() - new Date(session.created_at).getTime();
-  const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const maxAge = SESSION_MAX_AGE_MS;
   
   if (sessionAge > maxAge) {
     console.log('AUTH: Session expired');
@@ -268,6 +270,13 @@ app.post('/make-server-e95806c6/auth/signin', async (c) => {
     
     console.log(`User ${data.user.id} signed in successfully, session created`);
     await logLogin(data.user.id, true, 'success');
+
+    // Sweep everyone's expired sessions while we're here (no cron needed).
+    try {
+      await db.deleteExpiredSessions(new Date(Date.now() - SESSION_MAX_AGE_MS).toISOString());
+    } catch (sweepError) {
+      console.error(`Failed to delete expired sessions: ${sweepError}`);
+    }
 
     return c.json({
       access_token: customToken,

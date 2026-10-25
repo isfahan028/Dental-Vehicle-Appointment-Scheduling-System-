@@ -7,22 +7,40 @@ const client = () => createClient(
 
 // ===== SESSIONS =====
 
+// The sessions table stores only a SHA-256 hash of each token, never the
+// token itself, so a leaked database dump can't be replayed to hijack a
+// logged-in account. A plain fast hash (no salt / bcrypt) is enough here
+// because tokens are 256 random bits — unlike passwords, there's nothing
+// to brute-force. Callers always pass the raw token; hashing happens here.
+async function hashToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function getSession(token: string) {
   const supabase = client();
-  const { data, error } = await supabase.from('sessions').select('*').eq('token', token).maybeSingle();
+  const { data, error } = await supabase.from('sessions').select('*').eq('token', await hashToken(token)).maybeSingle();
   if (error) throw new Error(error.message);
   return data;
 }
 
 export async function createSession(token: string, userId: string) {
   const supabase = client();
-  const { error } = await supabase.from('sessions').insert({ token, user_id: userId });
+  const { error } = await supabase.from('sessions').insert({ token: await hashToken(token), user_id: userId });
   if (error) throw new Error(error.message);
 }
 
 export async function deleteSession(token: string) {
   const supabase = client();
-  const { error } = await supabase.from('sessions').delete().eq('token', token);
+  const { error } = await supabase.from('sessions').delete().eq('token', await hashToken(token));
+  if (error) throw new Error(error.message);
+}
+
+// Expired sessions are already rejected by verifyAuth, but one is only
+// deleted if someone presents it again — this sweeps the rest.
+export async function deleteExpiredSessions(createdBeforeIso: string) {
+  const supabase = client();
+  const { error } = await supabase.from('sessions').delete().lt('created_at', createdBeforeIso);
   if (error) throw new Error(error.message);
 }
 
