@@ -36,6 +36,59 @@ function generateToken() {
   return `mts_${hex}`;
 }
 
+// ===== LOGIN RATE LIMIT =====
+// Brute-force protection: too many FAILED sign-ins within the window locks
+// that email (and, with a higher bar, that IP — so one attacker can't spray
+// many accounts) until the oldest failure ages out of the window. A
+// successful sign-in clears the email's failures.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MAX_FAILS_PER_EMAIL = 5;
+const MAX_FAILS_PER_IP = 20;
+
+function clientIp(c: any): string | null {
+  const forwarded = c.req.header('x-forwarded-for');
+  return forwarded ? forwarded.split(',')[0].trim() || null : null;
+}
+
+// Returns how many seconds until the lock lifts, or null if not locked.
+// Fails OPEN: if the attempts table can't be read (e.g. migration 10 not run
+// yet), log it and let the login through rather than locking everyone out.
+async function loginLockSeconds(email: string, ip: string | null): Promise<number | null> {
+  try {
+    const since = new Date(Date.now() - LOGIN_WINDOW_MS).toISOString();
+    const [emailFails, ipFails] = await Promise.all([
+      db.getFailedLoginTimes('email', email, since),
+      ip ? db.getFailedLoginTimes('ip_address', ip, since) : Promise.resolve([] as string[]),
+    ]);
+
+    // When locked, the lock lifts once enough of the oldest failures leave
+    // the window to drop back under the limit.
+    const unlockAt = (fails: string[], max: number) =>
+      fails.length >= max ? new Date(fails[fails.length - max]).getTime() + LOGIN_WINDOW_MS : 0;
+    const until = Math.max(unlockAt(emailFails, MAX_FAILS_PER_EMAIL), unlockAt(ipFails, MAX_FAILS_PER_IP));
+
+    return until > Date.now() ? Math.ceil((until - Date.now()) / 1000) : null;
+  } catch (error) {
+    console.error(`Login rate-limit check failed (allowing login): ${error}`);
+    return null;
+  }
+}
+
+// Records a failure and returns how many tries that email has left (null if unknown).
+async function recordLoginFailure(email: string, ip: string | null): Promise<number | null> {
+  try {
+    await db.recordFailedLogin(email, ip);
+    // Keep the table small without a cron job.
+    await db.pruneLoginAttempts(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+    const since = new Date(Date.now() - LOGIN_WINDOW_MS).toISOString();
+    const fails = await db.getFailedLoginTimes('email', email, since);
+    return Math.max(0, MAX_FAILS_PER_EMAIL - fails.length);
+  } catch (error) {
+    console.error(`Failed to record login failure: ${error}`);
+    return null;
+  }
+}
+
 // Helper function to verify user authentication
 // Reads the custom session token from X-Session-Token header.
 async function verifyAuth(c: any) {
@@ -137,6 +190,20 @@ app.post('/make-server-e95806c6/auth/signin', async (c) => {
       return c.json({ error: 'Missing email or password' }, 400);
     }
 
+    // Checked BEFORE the password, so a locked account stays locked even
+    // if the next guess happens to be right.
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const ip = clientIp(c);
+    const lockSeconds = await loginLockSeconds(normalizedEmail, ip);
+    if (lockSeconds !== null) {
+      const minutes = Math.ceil(lockSeconds / 60);
+      console.log(`Sign in blocked by rate limit: ${normalizedEmail} (ip ${ip ?? 'unknown'})`);
+      c.header('Retry-After', String(lockSeconds));
+      return c.json({
+        error: `Too many failed sign-in attempts. Please try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+      }, 429);
+    }
+
     // Sign in with Supabase
     const { data, error } = await supabaseAdmin.auth.signInWithPassword({
       email,
@@ -145,7 +212,20 @@ app.post('/make-server-e95806c6/auth/signin', async (c) => {
 
     if (error) {
       console.log(`Sign in error: ${error.message}`);
-      return c.json({ error: error.message }, 401);
+      const triesLeft = await recordLoginFailure(normalizedEmail, ip);
+      const hint = triesLeft !== null && triesLeft <= 3
+        ? (triesLeft === 0
+          ? ' Too many failed attempts — sign-in is locked for 15 minutes.'
+          : ` ${triesLeft} attempt${triesLeft === 1 ? '' : 's'} left before a 15-minute lock.`)
+        : '';
+      return c.json({ error: `${error.message}.${hint}`.replace('..', '.') }, 401);
+    }
+
+    // Correct password: wipe this email's failure history.
+    try {
+      await db.clearFailedLogins(normalizedEmail);
+    } catch (clearError) {
+      console.error(`Failed to clear login attempts: ${clearError}`);
     }
 
     // Get user profile from relational DB

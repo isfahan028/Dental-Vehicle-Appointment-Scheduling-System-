@@ -35,6 +35,40 @@ export async function deleteSessionsByUser(userId: string) {
   if (error) throw new Error(error.message);
 }
 
+// ===== LOGIN ATTEMPTS (rate limiting) =====
+
+// Failed sign-ins for one email or one IP since `sinceIso`, oldest first —
+// the caller uses the oldest one to tell the user when the lock lifts.
+export async function getFailedLoginTimes(field: 'email' | 'ip_address', value: string, sinceIso: string) {
+  const supabase = client();
+  const { data, error } = await supabase
+    .from('login_attempts')
+    .select('attempted_at')
+    .eq(field, value)
+    .gte('attempted_at', sinceIso)
+    .order('attempted_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r: { attempted_at: string }) => r.attempted_at);
+}
+
+export async function recordFailedLogin(email: string, ipAddress: string | null) {
+  const supabase = client();
+  const { error } = await supabase.from('login_attempts').insert({ email, ip_address: ipAddress });
+  if (error) throw new Error(error.message);
+}
+
+export async function clearFailedLogins(email: string) {
+  const supabase = client();
+  const { error } = await supabase.from('login_attempts').delete().eq('email', email);
+  if (error) throw new Error(error.message);
+}
+
+export async function pruneLoginAttempts(beforeIso: string) {
+  const supabase = client();
+  const { error } = await supabase.from('login_attempts').delete().lt('attempted_at', beforeIso);
+  if (error) throw new Error(error.message);
+}
+
 // ===== USERS =====
 
 const mapUser = (dbUser: any) => ({
