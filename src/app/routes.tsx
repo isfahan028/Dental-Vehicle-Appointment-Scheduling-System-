@@ -9,6 +9,7 @@ import Appointments from "./pages/Appointments";
 import AdminDashboard from "./pages/AdminDashboard";
 import AvailabilityCalendar from "./pages/AvailabilityCalendar";
 import RecurringRequestPage from "./pages/RecurringRequest";
+import LiveMonitor from "./pages/LiveMonitor";
 
 export const router = createBrowserRouter([
   {
@@ -41,6 +42,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth requireAdmin>
             <AdminDashboard />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "admin/live/:vehicleId",
+        element: (
+          <RequireAuth requireAdmin>
+            <LiveMonitor />
           </RequireAuth>
         ),
       },

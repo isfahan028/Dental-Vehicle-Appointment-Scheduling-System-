@@ -1,12 +1,12 @@
-import { AlertCircle, ExternalLink, RefreshCw, Video, VideoOff } from 'lucide-react';
+import { Link } from 'react-router';
+import { AlertCircle, MonitorPlay, RefreshCw, Video, VideoOff } from 'lucide-react';
 import type { useLiveVehicles } from '../../hooks/useLiveVehicles';
 import { Button } from '../ui/Button';
 
 // Live camera feeds from the V-Track vehicle-video cloud. The data comes from
 // the dashboard (useLiveVehicles), which also feeds the "Live Cameras" stat.
 //
-// The player opens in a new tab rather than inline: the platform only serves
-// http and streams over ws://, which an https page can't embed or proxy.
+// "Open monitor" goes to the LiveMonitor page (video + vital signs).
 export function LiveTab({ live }: { live: ReturnType<typeof useLiveVehicles> }) {
   const { vehicles, onlineCount, error, isLoading, isRefreshing, reload } = live;
 
@@ -18,7 +18,7 @@ export function LiveTab({ live }: { live: ReturnType<typeof useLiveVehicles> }) 
           <p className="text-sm text-gray-500">
             {isLoading
               ? 'Loading vehicles…'
-              : `${onlineCount} of ${vehicles.length} vehicle${vehicles.length === 1 ? '' : 's'} online · video opens in a new tab`}
+              : `${onlineCount} of ${vehicles.length} vehicle${vehicles.length === 1 ? '' : 's'} online`}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={reload} disabled={isRefreshing} className="gap-1.5 self-start sm:self-auto">
@@ -58,20 +58,23 @@ export function LiveTab({ live }: { live: ReturnType<typeof useLiveVehicles> }) 
               <p>Cameras: {vehicle.channelCount}</p>
             </div>
             <div className="pt-4 border-t border-gray-100">
-              {vehicle.playerUrl ? (
-                <a
-                  href={vehicle.playerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              {vehicle.online ? (
+                <Link
+                  to={`/admin/live/${vehicle.id}`}
                   className="inline-flex items-center justify-center gap-1.5 w-full h-9 rounded-md bg-blue-600 text-white text-sm font-medium shadow hover:bg-blue-700 transition-colors"
                 >
-                  <ExternalLink size={15} />
-                  Watch live
-                </a>
+                  <MonitorPlay size={15} />
+                  Open monitor
+                </Link>
               ) : (
-                <Button variant="secondary" size="sm" disabled className="w-full h-9">
-                  Offline — no video
-                </Button>
+                // Still openable so the vitals can be watched without video.
+                <Link
+                  to={`/admin/live/${vehicle.id}`}
+                  className="inline-flex items-center justify-center gap-1.5 w-full h-9 rounded-md bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors"
+                >
+                  <MonitorPlay size={15} />
+                  Open monitor (camera offline)
+                </Link>
               )}
             </div>
           </div>
