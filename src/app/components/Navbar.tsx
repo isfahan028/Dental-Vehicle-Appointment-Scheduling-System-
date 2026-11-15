@@ -46,9 +46,14 @@ function Navbar() {
             </>
           )}
           {isAdmin && (
-            <NavLink to="/admin" className={linkClass}>
-              Admin Dashboard
-            </NavLink>
+            <>
+              <NavLink to="/admin" className={linkClass}>
+                Admin Dashboard
+              </NavLink>
+              <NavLink to="/monitor" className={linkClass}>
+                Monitor
+              </NavLink>
+            </>
           )}
 
           <div className="border-l border-blue-400 pl-4 flex gap-2">
@@ -110,9 +115,14 @@ function Navbar() {
             </>
           )}
           {isAdmin && (
-            <NavLink to="/admin" className={mobileLinkClass} onClick={closeMobile}>
-              Admin Dashboard
-            </NavLink>
+            <>
+              <NavLink to="/admin" className={mobileLinkClass} onClick={closeMobile}>
+                Admin Dashboard
+              </NavLink>
+              <NavLink to="/monitor" className={mobileLinkClass} onClick={closeMobile}>
+                Monitor
+              </NavLink>
+            </>
           )}
 
           <div className="border-t border-blue-500 mt-2 pt-3">

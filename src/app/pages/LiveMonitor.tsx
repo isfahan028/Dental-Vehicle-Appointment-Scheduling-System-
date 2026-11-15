@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
-import { AlertCircle, ArrowLeft, ExternalLink, Maximize, RotateCw, VideoOff } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router';
+import { AlertCircle, ExternalLink, Maximize, MonitorPlay, RotateCw, VideoOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLiveVehicles } from '../hooks/useLiveVehicles';
 import { useVitals } from '../hooks/useVitals';
@@ -8,7 +8,7 @@ import { createMockVitalsSource, VITALS } from '../lib/vitals';
 import { VitalCard } from '../components/monitor/VitalCard';
 import { Button } from '../components/ui/Button';
 
-// Doctor's monitor for one vehicle: one live camera in the middle, patient
+// Doctor's monitor (navbar "Monitor", /monitor[/:vehicleId]) for one vehicle: one live camera in the middle, patient
 // vital signs around it. Vitals are simulated until the real sensors are
 // wired in (see lib/vitals.ts).
 //
@@ -18,9 +18,13 @@ import { Button } from '../components/ui/Button';
 // https site we fall back to opening the player in a new tab.
 export default function LiveMonitor() {
   const { vehicleId } = useParams();
+  const navigate = useNavigate();
   const { accessToken } = useAuth();
   const live = useLiveVehicles(accessToken);
-  const vehicle = live.vehicles.find(v => v.id === vehicleId) ?? null;
+  // No vehicle in the URL (opened from the navbar): default to the first
+  // online one, else the first one listed.
+  const selectedId = vehicleId ?? (live.vehicles.find(v => v.online) ?? live.vehicles[0])?.id;
+  const vehicle = live.vehicles.find(v => v.id === selectedId) ?? null;
 
   const vitalsSource = useMemo(() => createMockVitalsSource(), []);
   const vitals = useVitals(vitalsSource);
@@ -32,9 +36,18 @@ export default function LiveMonitor() {
   // (Adjusted during render rather than in an effect — React's pattern for
   // state derived from props.)
   const latestPlayerUrl = vehicle?.playerUrl ?? null;
-  const [playerBase, setPlayerBase] = useState<string | null>(null);
-  if (latestPlayerUrl === null && playerBase !== null) setPlayerBase(null);
-  else if (latestPlayerUrl !== null && playerBase === null) setPlayerBase(latestPlayerUrl);
+  const [frozen, setFrozen] = useState<{ vehicleId: string; url: string } | null>(null);
+  if (!latestPlayerUrl || !vehicle) {
+    if (frozen !== null) setFrozen(null);
+  } else if (frozen?.vehicleId !== vehicle.id) {
+    setFrozen({ vehicleId: vehicle.id, url: latestPlayerUrl });
+  }
+  const playerBase = frozen?.url ?? null;
+
+  const selectVehicle = (id: string) => {
+    setChannel(1);
+    navigate(`/monitor/${id}`);
+  };
 
   const playerSrc = playerBase ? `${playerBase}&index=${channel}` : null;
   const canEmbed = window.location.protocol === 'http:' || !!playerBase?.startsWith('https:');
@@ -57,13 +70,29 @@ export default function LiveMonitor() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <Link to="/admin" className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 flex-shrink-0" title="Back to dashboard">
-            <ArrowLeft size={20} />
-          </Link>
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-gray-900 truncate">
-              {vehicle?.name ?? (live.isLoading ? 'Loading…' : 'Vehicle not found')}
-            </h1>
+          <div className="hidden sm:flex w-12 h-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-blue-400 text-white shadow-lg shadow-blue-200">
+            <MonitorPlay size={24} />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">Live Monitor</h1>
+              <select
+                value={vehicle?.id ?? ''}
+                onChange={e => selectVehicle(e.target.value)}
+                disabled={live.vehicles.length === 0}
+                aria-label="Vehicle"
+                className="max-w-full text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {live.vehicles.length === 0 && (
+                  <option value="">{live.isLoading ? 'Loading vehicles…' : 'No vehicles'}</option>
+                )}
+                {live.vehicles.map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.online ? '● ' : '○ '}{v.name}{v.online ? '' : ' (offline)'}
+                  </option>
+                ))}
+              </select>
+            </div>
             <p className="text-sm text-gray-500 flex items-center gap-2">
               {vehicle && (
                 <span className={`inline-flex items-center gap-1.5 font-semibold ${vehicle.online ? 'text-green-700' : 'text-gray-500'}`}>

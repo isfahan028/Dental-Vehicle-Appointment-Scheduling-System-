@@ -46,7 +46,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "admin/live/:vehicleId",
+        path: "monitor/:vehicleId?",
         element: (
           <RequireAuth requireAdmin>
             <LiveMonitor />
