@@ -7,14 +7,18 @@
 //   VTRACK_BASE  platform base URL  (default http://103.233.193.79)
 //   VTRACK_USER  account name
 //   VTRACK_PASS  account password
+//   VTRACK_PLAYER_BASE  optional https URL of our reverse proxy (vtrack-proxy/)
 //
-// Why the player is opened in a new tab instead of embedded: the platform is
-// http-only and its player streams over a plain ws:// WebSocket on a separate
-// port, so an https page (Vercel) can neither iframe it nor proxy it.
+// The platform is http-only and its player streams over a plain ws://
+// WebSocket on a separate port, so an https page can't embed it directly.
+// When VTRACK_PLAYER_BASE points at the https reverse proxy, player URLs go
+// through it (with singleHttpsPort=1) and can be embedded; without it they
+// point straight at the platform and only work in a new http tab.
 
 const BASE = (Deno.env.get('VTRACK_BASE') || 'http://103.233.193.79').replace(/\/+$/, '');
 const USER = Deno.env.get('VTRACK_USER');
 const PASS = Deno.env.get('VTRACK_PASS');
+const PLAYER_BASE = (Deno.env.get('VTRACK_PLAYER_BASE') || BASE).replace(/\/+$/, '');
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -96,10 +100,12 @@ async function authedGet(action: string, params: Record<string, string | undefin
 // The platform's ready-made live player for one device. View-only: never pass
 // talkback/mic params (professor's instruction).
 function buildPlayerUrl(deviceNo: string, jsession: string) {
-  const url = new URL(`${BASE}/808gps/open/player/video.html`);
+  const url = new URL(`${PLAYER_BASE}/808gps/open/player/video.html`);
   url.searchParams.set('lang', 'en');
   url.searchParams.set('devIdno', deviceNo);
   url.searchParams.set('sessid', jsession);
+  // Behind the https proxy, address every media port as https://host/<port+10000>.
+  if (url.protocol === 'https:') url.searchParams.set('singleHttpsPort', '1');
   return url.toString();
 }
 
