@@ -30,7 +30,19 @@ addressed as `https://host/<P+10000>/...`). Two V-Track quirks it handles:
    `upgrade: websocket` (lowercase) and sends plain FLV instead, which breaks
    the browser's WebSocket. The proxy re-cases headers (`Upgrade`, `Sec-WebSocket-Key`…).
 
-## Run it
+## One command (what to use day to day)
+
+```bash
+npm run tunnel
+```
+
+Starts the proxy, opens a Cloudflare quick tunnel, waits for its new https
+URL to come online, and sets `VTRACK_PLAYER_BASE` to it — then prints
+**READY**. Keep the window open; **Ctrl+C** stops everything and unsets the
+secret so the site falls back to the new-tab player. Needs `cloudflared`
+(install below) and the Supabase CLI logged in. `DRY_RUN=1` skips the secret.
+
+## Run it by hand
 
 Needs Node 18+, no `npm install`.
 
